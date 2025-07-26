@@ -2,6 +2,8 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const ethers = require('ethers');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -29,6 +31,34 @@ const nftABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 
 // Persistent game state
 let openGames = [];
+const gamesFile = path.join('/var/data', 'games.json'); // Render disk mount path
+
+// Ensure the data folder exists
+if (!fs.existsSync('/var/data')) {
+  fs.mkdirSync('/var/data', { recursive: true });
+}
+
+// Load games from disk
+function loadGamesFromDisk() {
+  if (fs.existsSync(gamesFile)) {
+    try {
+      openGames = JSON.parse(fs.readFileSync(gamesFile));
+      console.log('✅ Loaded open games from disk');
+    } catch (e) {
+      console.error('❌ Error loading games from disk:', e);
+    }
+  }
+}
+
+// Save games to disk
+function saveGamesToDisk() {
+  try {
+    fs.writeFileSync(gamesFile, JSON.stringify(openGames, null, 2));
+    console.log('✅ Saved open games to disk');
+  } catch (e) {
+    console.error('❌ Error saving games to disk:', e);
+  }
+}
 
 async function setupProvider() {
   let provider;
@@ -56,6 +86,9 @@ async function initializeContract() {
   const contract = new ethers.Contract(gameAddress, gameABI, provider);
   const nftContract = new ethers.Contract(nftAddress, nftABI, provider);
 
+  // Load games from disk on startup
+  loadGamesFromDisk();
+
   // Fetch open games
   async function fetchOpenGames() {
     try {
@@ -79,7 +112,7 @@ async function initializeContract() {
             player1: game.player1,
             tokenId1: game.tokenId1.toString(),
             image,
-            createdAt: new Date(Number(game.createTimestamp) * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
+            createdAt: new Date(Number(game.createTimestamp) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             createTimestamp: game.createTimestamp.toString()
           });
         } catch (error) {
@@ -88,6 +121,7 @@ async function initializeContract() {
       }
       console.log('Broadcasting open games:', openGames);
       io.emit('openGamesUpdate', openGames);
+      saveGamesToDisk(); // Save to disk after fetching
     } catch (error) {
       console.error('Error fetching open games:', error);
     }
@@ -122,11 +156,20 @@ async function initializeContract() {
 
   // Initial fetch
   await fetchOpenGames();
+
+  // Periodically emit openGames to keep clients synced
+  setInterval(() => {
+    console.log('Emitting periodic openGamesUpdate');
+    io.emit('openGamesUpdate', openGames);
+  }, 10000); // Every 10 seconds
 }
 
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
-  socket.emit('openGamesUpdate', openGames);
+  socket.emit('openGamesUpdate', openGames); // Send immediately on connect
+  setTimeout(() => {
+    socket.emit('openGamesUpdate', openGames); // Send again after 3 seconds
+  }, 3000);
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
   });
