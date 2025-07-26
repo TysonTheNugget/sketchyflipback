@@ -6,8 +6,6 @@ require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
-
-// ✅ Updated CORS origin
 const io = new Server(server, {
   cors: {
     origin: 'https://sketchyflips.vercel.app',
@@ -26,80 +24,112 @@ const gameABI = [
   "function getGame(uint256 gameId) view returns (tuple(address player1, uint256 tokenId1, address player2, uint256 tokenId2, bool active, uint256 requestId, bytes data, uint256 joinTimestamp, uint256 createTimestamp))"
 ];
 
-const provider = new ethers.providers.WebSocketProvider(process.env.ALCHEMY_WSS_URL);
-const contract = new ethers.Contract(gameAddress, gameABI, provider);
+const nftAddress = '0x08533a2b16e3db03eebd5b23210122f97dfcb97d';
+const nftABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 
-// Game state cache
+// Persistent game state
 let openGames = [];
 
-// Fetch open games and fetch token URI for images
-async function fetchOpenGames() {
+async function setupProvider() {
+  let provider;
   try {
-    const openIds = await contract.getOpenGames();
-    openGames = [];
-    const nftContract = new ethers.Contract(
-      '0x08533a2b16e3db03eebd5b23210122f97dfcb97d',
-      ["function tokenURI(uint256 tokenId) view returns (string)"],
-      provider
-    );
-
-    for (let id of openIds) {
-      const game = await contract.getGame(id);
-      let uri = await nftContract.tokenURI(game.tokenId1);
-      if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
-      const response = await fetch(uri);
-      const metadata = await response.json();
-      let image = metadata.image;
-      if (image.startsWith('ipfs://')) image = 'https://ipfs.io/ipfs/' + image.slice(7);
-      openGames.push({
-        id: id.toString(),
-        player1: game.player1,
-        tokenId1: game.tokenId1.toString(),
-        image: image,
-        createdAt: new Date(Number(game.createTimestamp) * 1000).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-      });
-    }
-
-    io.emit('openGamesUpdate', openGames);
+    provider = new ethers.providers.WebSocketProvider(process.env.ALCHEMY_WSS_URL);
+    provider.on('error', (error) => {
+      console.error('WebSocket error:', error);
+      setTimeout(setupProvider, 5000); // Retry after 5 seconds
+    });
+    provider.on('close', () => {
+      console.log('WebSocket closed, reconnecting...');
+      setTimeout(setupProvider, 5000);
+    });
   } catch (error) {
-    console.error('Error fetching open games:', error);
+    console.error('Provider setup error:', error);
+    setTimeout(setupProvider, 5000);
+    return;
   }
+  return provider;
 }
 
-// Event listeners
-contract.on('GameCreated', async (gameId, player1, tokenId1) => {
-  console.log('GameCreated:', gameId.toString());
-  await fetchOpenGames();
-});
+async function initializeContract() {
+  const provider = await setupProvider();
+  if (!provider) return;
+  const contract = new ethers.Contract(gameAddress, gameABI, provider);
+  const nftContract = new ethers.Contract(nftAddress, nftABI, provider);
 
-contract.on('GameJoined', async (gameId, player2, tokenId2) => {
-  console.log('GameJoined:', gameId.toString());
-  await fetchOpenGames();
-});
+  // Fetch open games
+  async function fetchOpenGames() {
+    try {
+      const openIds = await contract.getOpenGames();
+      openGames = [];
+      for (let id of openIds) {
+        try {
+          const game = await contract.getGame(id);
+          let image = 'https://via.placeholder.com/80'; // Fallback image
+          try {
+            let uri = await nftContract.tokenURI(game.tokenId1);
+            if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
+            const response = await fetch(uri);
+            const metadata = await response.json();
+            image = metadata.image.startsWith('ipfs://') ? 'https://ipfs.io/ipfs/' + metadata.image.slice(7) : metadata.image;
+          } catch (error) {
+            console.error(`Error fetching metadata for token ${game.tokenId1}:`, error);
+          }
+          openGames.push({
+            id: id.toString(),
+            player1: game.player1,
+            tokenId1: game.tokenId1.toString(),
+            image,
+            createdAt: new Date(Number(game.createTimestamp) * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
+            createTimestamp: game.createTimestamp.toString()
+          });
+        } catch (error) {
+          console.error(`Error fetching game ${id}:`, error);
+        }
+      }
+      console.log('Broadcasting open games:', openGames);
+      io.emit('openGamesUpdate', openGames);
+    } catch (error) {
+      console.error('Error fetching open games:', error);
+    }
+  }
 
-contract.on('GameResolved', async (gameId, winner, tokenId1, tokenId2) => {
-  console.log('GameResolved:', gameId.toString(), 'Winner:', winner);
-  await fetchOpenGames();
-  io.emit('gameResolved', {
-    gameId: gameId.toString(),
-    winner,
-    tokenId1: tokenId1.toString(),
-    tokenId2: tokenId2.toString()
+  // Event listeners
+  contract.on('GameCreated', async (gameId, player1, tokenId1) => {
+    console.log('GameCreated:', gameId.toString(), 'Player:', player1);
+    await fetchOpenGames();
   });
-});
 
-contract.on('GameCanceled', async (gameId) => {
-  console.log('GameCanceled:', gameId.toString());
+  contract.on('GameJoined', async (gameId, player2, tokenId2) => {
+    console.log('GameJoined:', gameId.toString(), 'Player:', player2);
+    await fetchOpenGames();
+  });
+
+  contract.on('GameResolved', async (gameId, winner, tokenId1, tokenId2) => {
+    console.log('GameResolved:', gameId.toString(), 'Winner:', winner);
+    await fetchOpenGames();
+    io.emit('gameResolved', {
+      gameId: gameId.toString(),
+      winner,
+      tokenId1: tokenId1.toString(),
+      tokenId2: tokenId2.toString()
+    });
+  });
+
+  contract.on('GameCanceled', async (gameId) => {
+    console.log('GameCanceled:', gameId.toString());
+    await fetchOpenGames();
+  });
+
+  // Initial fetch
   await fetchOpenGames();
-});
+}
 
-// Socket.IO connection
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
   socket.emit('openGamesUpdate', openGames);
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
 });
 
 app.get('/', (req, res) => {
@@ -109,5 +139,5 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  fetchOpenGames();
+  initializeContract();
 });
