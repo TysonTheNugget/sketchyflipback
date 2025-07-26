@@ -6,9 +6,11 @@ require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
+
+// ✅ Updated CORS origin
 const io = new Server(server, {
   cors: {
-    origin: '*', // Update to your Vercel URL in production (e.g., https://your-vercel-app.vercel.app)
+    origin: 'https://sketchyflips.vercel.app',
     methods: ['GET', 'POST']
   }
 });
@@ -35,7 +37,12 @@ async function fetchOpenGames() {
   try {
     const openIds = await contract.getOpenGames();
     openGames = [];
-    const nftContract = new ethers.Contract('0x08533a2b16e3db03eebd5b23210122f97dfcb97d', ["function tokenURI(uint256 tokenId) view returns (string)"], provider);
+    const nftContract = new ethers.Contract(
+      '0x08533a2b16e3db03eebd5b23210122f97dfcb97d',
+      ["function tokenURI(uint256 tokenId) view returns (string)"],
+      provider
+    );
+
     for (let id of openIds) {
       const game = await contract.getGame(id);
       let uri = await nftContract.tokenURI(game.tokenId1);
@@ -49,9 +56,13 @@ async function fetchOpenGames() {
         player1: game.player1,
         tokenId1: game.tokenId1.toString(),
         image: image,
-        createdAt: new Date(Number(game.createTimestamp) * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
+        createdAt: new Date(Number(game.createTimestamp) * 1000).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
       });
     }
+
     io.emit('openGamesUpdate', openGames);
   } catch (error) {
     console.error('Error fetching open games:', error);
