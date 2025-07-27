@@ -10,14 +10,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: 'https://sketchyflips.vercel.app',
+        origin: ['https://sketchyflips.vercel.app', 'http://localhost:10000'],
         methods: ['GET', 'POST']
     }
 });
 
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.static(__dirname)); // Serve index.html, styles.css, etc.
+app.use(express.static(__dirname));
 
 const gameAddress = '0xf6b8d2E0d36669Ed82059713BDc6ACfABe11Fde6';
 const gameABI = [
@@ -160,14 +160,17 @@ async function initializeContract() {
     async function getNFTImage(tokenId) {
         try {
             let uri = await nftContract.tokenURI(tokenId);
+            console.log(`Fetching metadata for token ${tokenId}: ${uri}`);
             if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
             const response = await fetch(uri);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const metadata = await response.json();
             let image = metadata.image;
-            if (image.startsWith('ipfs://')) image = 'https://ipfs.io/ipfs/' + metadata.image.slice(7);
+            console.log(`Image URL for token ${tokenId}: ${image}`);
+            if (image.startsWith('ipfs://')) image = 'https://ipfs.io/ipfs/' + image.slice(7);
             return image;
         } catch (error) {
-            console.error(`Error fetching image for token ${tokenId}:`, error);
+            console.error(`Error fetching image for token ${tokenId}:`, error.message);
             return 'https://via.placeholder.com/64';
         }
     }
@@ -368,6 +371,9 @@ async function initializeContract() {
                     return;
                 }
             }
+            resolvedGame.userResolved[account.toLowerCase()] = true;
+            resolvedGame.viewed[account.toLowerCase()] = true;
+            saveResolvedGamesToDisk();
             if (resolvedGame.resolved && resolvedGame.winner) {
                 socket.emit('gameResolution', {
                     gameId,
@@ -381,6 +387,23 @@ async function initializeContract() {
             } else {
                 socket.emit('gameResolution', { gameId, resolved: false });
             }
+        });
+
+        socket.on('markGameResolved', ({ gameId, account }) => {
+            console.log('Marking game resolved for game:', gameId, 'account:', account.toLowerCase());
+            resolvedGames = resolvedGames.map(game => 
+                game.gameId === gameId ? {
+                    ...game,
+                    userResolved: { ...game.userResolved, [account.toLowerCase()]: true },
+                    viewed: { ...game.viewed, [account.toLowerCase()]: true }
+                } : game
+            );
+            saveResolvedGamesToDisk();
+            const userGames = resolvedGames.filter(game => 
+                game.player1.toLowerCase() === account.toLowerCase() || 
+                (game.player2 && game.player2.toLowerCase() === account.toLowerCase())
+            );
+            socket.emit('resolvedGames', userGames);
         });
 
         socket.on('removeGame', ({ gameId, account }) => {
