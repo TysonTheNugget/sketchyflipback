@@ -152,6 +152,22 @@ async function initializeContract() {
     }
   }
 
+  // Fetch NFT image
+  async function getNFTImage(tokenId) {
+    try {
+      let uri = await nftContract.tokenURI(tokenId);
+      if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
+      const response = await fetch(uri);
+      const metadata = await response.json();
+      let image = metadata.image;
+      if (image.startsWith('ipfs://')) image = 'https://ipfs.io/ipfs/' + image.slice(7);
+      return image;
+    } catch (error) {
+      console.error(`Error fetching image for token ${tokenId}:`, error);
+      return 'https://via.placeholder.com/64';
+    }
+  }
+
   // Event listeners
   contract.on('GameCreated', async (gameId, player1, tokenId1) => {
     console.log('GameCreated:', gameId.toString(), 'Player:', player1);
@@ -161,38 +177,49 @@ async function initializeContract() {
   contract.on('GameJoined', async (gameId, player2, tokenId2) => {
     console.log('GameJoined:', gameId.toString(), 'Player:', player2);
     const game = await contract.getGame(gameId);
+    const image1 = await getNFTImage(game.tokenId1);
+    const image2 = await getNFTImage(tokenId2);
     io.emit('gameJoined', {
       gameId: gameId.toString(),
       player1: game.player1,
       tokenId1: game.tokenId1.toString(),
+      image1,
       player2,
       tokenId2: tokenId2.toString(),
+      image2,
       joinTimestamp: game.joinTimestamp.toString()
     });
-    await fetchOpenGames();
     resolvedGames.push({
       gameId: gameId.toString(),
       player1: game.player1,
       tokenId1: game.tokenId1.toString(),
+      image1,
       player2,
       tokenId2: tokenId2.toString(),
-      resolved: false
+      image2,
+      resolved: false,
+      userResolved: false,
+      viewed: false
     });
     saveResolvedGamesToDisk();
+    await fetchOpenGames();
   });
 
   contract.on('GameResolved', async (gameId, winner, tokenId1, tokenId2) => {
     console.log('GameResolved:', gameId.toString(), 'Winner:', winner);
+    const image1 = await getNFTImage(tokenId1);
+    const image2 = await getNFTImage(tokenId2);
     resolvedGames = resolvedGames.map(game => 
-      game.gameId === gameId.toString() ? { ...game, winner, resolved: true } : game
+      game.gameId === gameId.toString() ? { 
+        ...game, 
+        winner, 
+        resolved: true, 
+        image1, 
+        image2, 
+        viewed: false 
+      } : game
     );
     saveResolvedGamesToDisk();
-    io.emit('gameResolved', {
-      gameId: gameId.toString(),
-      winner,
-      tokenId1: tokenId1.toString(),
-      tokenId2: tokenId2.toString()
-    });
     await fetchOpenGames();
   });
 
@@ -230,7 +257,7 @@ async function initializeContract() {
       console.log('Fetching resolved games for account:', account);
       const userGames = resolvedGames.filter(game => 
         game.player1.toLowerCase() === account.toLowerCase() || 
-        game.player2.toLowerCase() === account.toLowerCase()
+        (game.player2 && game.player2.toLowerCase() === account.toLowerCase())
       );
       socket.emit('resolvedGames', userGames);
     });
@@ -239,19 +266,25 @@ async function initializeContract() {
       console.log('Resolving game:', gameId, 'for account:', account);
       try {
         const game = await contract.getGame(gameId);
-        if (!game.active) {
-          const resolvedGame = resolvedGames.find(g => g.gameId === gameId);
-          if (resolvedGame && resolvedGame.winner) {
-            socket.emit('gameResolution', {
-              gameId,
-              winner: resolvedGame.winner,
-              tokenId1: resolvedGame.tokenId1,
-              tokenId2: resolvedGame.tokenId2,
-              resolved: true
-            });
-          } else {
-            socket.emit('gameResolution', { gameId, error: 'Game resolved but no winner found' });
-          }
+        const resolvedGame = resolvedGames.find(g => g.gameId === gameId);
+        if (!resolvedGame) {
+          socket.emit('gameResolution', { gameId, error: 'Game not found' });
+          return;
+        }
+        if (!game.active && resolvedGame.resolved) {
+          socket.emit('gameResolution', {
+            gameId,
+            winner: resolvedGame.winner,
+            tokenId1: resolvedGame.tokenId1,
+            tokenId2: resolvedGame.tokenId2,
+            image1: resolvedGame.image1,
+            image2: resolvedGame.image2,
+            resolved: true
+          });
+          resolvedGames = resolvedGames.map(g => 
+            g.gameId === gameId ? { ...g, userResolved: true, viewed: false } : g
+          );
+          saveResolvedGamesToDisk();
         } else if (game.player2 !== '0x0000000000000000000000000000000000000000') {
           socket.emit('gameResolution', { gameId, resolved: false });
         } else {
@@ -261,6 +294,23 @@ async function initializeContract() {
         console.error(`Error resolving game ${gameId}:`, error);
         socket.emit('gameResolution', { gameId, error: error.message });
       }
+    });
+
+    socket.on('markGamesViewed', ({ account, gameIds }) => {
+      console.log('Marking games viewed for account:', account, 'gameIds:', gameIds);
+      resolvedGames = resolvedGames.map(game => 
+        gameIds.includes(game.gameId) && 
+        (game.player1.toLowerCase() === account.toLowerCase() || 
+         (game.player2 && game.player2.toLowerCase() === account.toLowerCase())) 
+          ? { ...game, viewed: true } 
+          : game
+      );
+      saveResolvedGamesToDisk();
+      const userGames = resolvedGames.filter(game => 
+        game.player1.toLowerCase() === account.toLowerCase() || 
+        (game.player2 && game.player2.toLowerCase() === account.toLowerCase())
+      );
+      socket.emit('resolvedGames', userGames);
     });
 
     socket.on('disconnect', () => {
