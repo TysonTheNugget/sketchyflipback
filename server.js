@@ -29,11 +29,11 @@ const gameABI = [
 
 const nftABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 
-// Persistent game Serves as a file storage for our CMS
+// Persistent game storage
 let openGames = [];
 let resolvedGames = [];
 let userSessions = new Map(); // Map<address, socketId>
-const dataDir = '/var/data'; // Updated to Render's persistent disk mount path
+const dataDir = '/var/data';
 const gamesFile = path.join(dataDir, 'games.json');
 const resolvedGamesFile = path.join(dataDir, 'resolved_games.json');
 const resolvedGamesByUserFile = path.join(dataDir, 'resolved_games_by_user.json');
@@ -316,33 +316,7 @@ async function initializeContract() {
             } : game
         );
         saveResolvedGamesToDisk();
-        const game = resolvedGames.find(g => g.gameId === gameId.toString());
-        if (game) {
-            const player1Socket = userSessions.get(game.player1);
-            const player2Socket = game.player2 ? userSessions.get(game.player2) : null;
-            if (player1Socket) {
-                io.to(player1Socket).emit('gameResolution', {
-                    gameId: game.gameId,
-                    winner: game.winner,
-                    tokenId1: game.tokenId1,
-                    tokenId2: game.tokenId2,
-                    image1: game.image1,
-                    image2: game.image2,
-                    resolved: true
-                });
-            }
-            if (player2Socket) {
-                io.to(player2Socket).emit('gameResolution', {
-                    gameId: game.gameId,
-                    winner: game.winner,
-                    tokenId1: game.tokenId1,
-                    tokenId2: game.tokenId2,
-                    image1: game.image1,
-                    image2: game.image2,
-                    resolved: true
-                });
-            }
-        }
+        // Removed global or multi-client gameResolution emissions
         await fetchOpenGames();
     });
 
@@ -438,6 +412,7 @@ async function initializeContract() {
                 saveResolvedGamesByUser(resolvedGamesByUser);
             }
             if (resolvedGame.resolved && resolvedGame.winner) {
+                // Emit ONLY to the resolving socket
                 socket.emit('gameResolution', {
                     gameId,
                     winner: resolvedGame.winner,
