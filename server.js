@@ -29,13 +29,14 @@ const gameABI = [
 
 const nftABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 
-// Persistent game state with user tracking
+// Persistent game Serves as a file storage for our CMS
 let openGames = [];
 let resolvedGames = [];
 let userSessions = new Map(); // Map<address, socketId>
-const dataDir = path.join(__dirname, 'data');
+const dataDir = '/var/data'; // Updated to Render's persistent disk mount path
 const gamesFile = path.join(dataDir, 'games.json');
 const resolvedGamesFile = path.join(dataDir, 'resolved_games.json');
+const resolvedGamesByUserFile = path.join(dataDir, 'resolved_games_by_user.json');
 
 // Ensure the data folder exists
 if (!fs.existsSync(dataDir)) {
@@ -85,6 +86,29 @@ function saveResolvedGamesToDisk() {
         console.error('❌ Error saving resolved games to disk:', e);
     }
 }
+
+// Load resolved games by user from disk
+function loadResolvedGamesByUser() {
+    if (!fs.existsSync(resolvedGamesByUserFile)) return {};
+    try {
+        return JSON.parse(fs.readFileSync(resolvedGamesByUserFile));
+    } catch (e) {
+        console.error('❌ Error loading resolved games by user from disk:', e);
+        return {};
+    }
+}
+
+// Save resolved games by user to disk
+function saveResolvedGamesByUser(data) {
+    try {
+        fs.writeFileSync(resolvedGamesByUserFile, JSON.stringify(data, null, 2));
+        console.log('✅ Saved resolved games by user to disk');
+    } catch (e) {
+        console.error('❌ Error saving resolved games by user to disk:', e);
+    }
+}
+
+let resolvedGamesByUser = loadResolvedGamesByUser();
 
 async function setupProvider() {
     let provider;
@@ -198,15 +222,19 @@ async function initializeContract() {
                 }
             }
             saveResolvedGamesToDisk();
+            const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
             return resolvedGames.filter(game => 
-                game.player1 === accountLower || 
-                (game.player2 && game.player2 === accountLower)
+                (game.player1 === accountLower || 
+                (game.player2 && game.player2 === accountLower)) &&
+                !userResolvedGames.has(game.gameId)
             );
         } catch (error) {
             console.error('Error fetching resolved games:', error);
+            const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
             return resolvedGames.filter(game => 
-                game.player1 === accountLower || 
-                (game.player2 && game.player2 === accountLower)
+                (game.player1 === accountLower || 
+                (game.player2 && game.player2 === accountLower)) &&
+                !userResolvedGames.has(game.gameId)
             );
         }
     }
@@ -404,6 +432,11 @@ async function initializeContract() {
             resolvedGame.userResolved[accountLower] = true;
             resolvedGame.viewed[accountLower] = true;
             saveResolvedGamesToDisk();
+            if (!resolvedGamesByUser[accountLower]) resolvedGamesByUser[accountLower] = [];
+            if (!resolvedGamesByUser[accountLower].includes(gameId)) {
+                resolvedGamesByUser[accountLower].push(gameId);
+                saveResolvedGamesByUser(resolvedGamesByUser);
+            }
             if (resolvedGame.resolved && resolvedGame.winner) {
                 socket.emit('gameResolution', {
                     gameId,
@@ -417,9 +450,11 @@ async function initializeContract() {
                 // Remove the game for the user
                 resolvedGames = resolvedGames.filter(g => g.gameId !== gameId);
                 saveResolvedGamesToDisk();
+                const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
                 const userGames = resolvedGames.filter(game => 
-                    game.player1 === accountLower || 
-                    (game.player2 && game.player2 === accountLower)
+                    (game.player1 === accountLower || 
+                    (game.player2 && game.player2 === accountLower)) &&
+                    !userResolvedGames.has(game.gameId)
                 );
                 socket.emit('resolvedGames', userGames);
             } else {
@@ -437,10 +472,17 @@ async function initializeContract() {
                     viewed: { ...game.viewed, [accountLower]: true }
                 } : game
             );
+            if (!resolvedGamesByUser[accountLower]) resolvedGamesByUser[accountLower] = [];
+            if (!resolvedGamesByUser[accountLower].includes(gameId)) {
+                resolvedGamesByUser[accountLower].push(gameId);
+                saveResolvedGamesByUser(resolvedGamesByUser);
+            }
             saveResolvedGamesToDisk();
+            const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
             const userGames = resolvedGames.filter(game => 
-                game.player1 === accountLower || 
-                (game.player2 && game.player2 === accountLower)
+                (game.player1 === accountLower || 
+                (game.player2 && game.player2 === accountLower)) &&
+                !userResolvedGames.has(game.gameId)
             );
             socket.emit('resolvedGames', userGames);
         });
@@ -449,10 +491,17 @@ async function initializeContract() {
             const accountLower = account.toLowerCase();
             console.log('Removing game:', gameId, 'for account:', accountLower);
             resolvedGames = resolvedGames.filter(game => game.gameId !== gameId);
+            if (!resolvedGamesByUser[accountLower]) resolvedGamesByUser[accountLower] = [];
+            if (!resolvedGamesByUser[accountLower].includes(gameId)) {
+                resolvedGamesByUser[accountLower].push(gameId);
+                saveResolvedGamesByUser(resolvedGamesByUser);
+            }
             saveResolvedGamesToDisk();
+            const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
             const userGames = resolvedGames.filter(game => 
-                game.player1 === accountLower || 
-                (game.player2 && game.player2 === accountLower)
+                (game.player1 === accountLower || 
+                (game.player2 && game.player2 === accountLower)) &&
+                !userResolvedGames.has(game.gameId)
             );
             socket.emit('resolvedGames', userGames);
         });
@@ -474,9 +523,11 @@ async function initializeContract() {
                   : game
             );
             saveResolvedGamesToDisk();
+            const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
             const userGames = resolvedGames.filter(game => 
-                game.player1 === accountLower || 
-                (game.player2 && game.player2 === accountLower)
+                (game.player1 === accountLower || 
+                (game.player2 && game.player2 === accountLower)) &&
+                !userResolvedGames.has(game.gameId)
             );
             socket.emit('resolvedGames', userGames);
         });
