@@ -198,8 +198,14 @@ async function initializeContract() {
       tokenId2: tokenId2.toString(),
       image2,
       resolved: false,
-      userResolved: false,
-      viewed: false
+      userResolved: {
+        [game.player1.toLowerCase()]: false,
+        [player2.toLowerCase()]: false
+      },
+      viewed: {
+        [game.player1.toLowerCase()]: false,
+        [player2.toLowerCase()]: false
+      }
     });
     saveResolvedGamesToDisk();
     await fetchOpenGames();
@@ -216,7 +222,11 @@ async function initializeContract() {
         resolved: true, 
         image1, 
         image2, 
-        viewed: false 
+        viewed: {
+          ...game.viewed,
+          [game.player1.toLowerCase()]: false,
+          [game.player2.toLowerCase()]: false
+        }
       } : game
     );
     saveResolvedGamesToDisk();
@@ -263,46 +273,50 @@ async function initializeContract() {
     });
 
     socket.on('resolveGame', async ({ gameId, account }) => {
-      console.log('Resolving game:', gameId, 'for account:', account);
-      try {
-        const game = await contract.getGame(gameId);
-        const resolvedGame = resolvedGames.find(g => g.gameId === gameId);
-        if (!resolvedGame) {
-          socket.emit('gameResolution', { gameId, error: 'Game not found' });
-          return;
-        }
-        if (!game.active && resolvedGame.resolved) {
-          socket.emit('gameResolution', {
-            gameId,
-            winner: resolvedGame.winner,
-            tokenId1: resolvedGame.tokenId1,
-            tokenId2: resolvedGame.tokenId2,
-            image1: resolvedGame.image1,
-            image2: resolvedGame.image2,
-            resolved: true
-          });
-          resolvedGames = resolvedGames.map(g => 
-            g.gameId === gameId ? { ...g, userResolved: true, viewed: false } : g
-          );
-          saveResolvedGamesToDisk();
-        } else if (game.player2 !== '0x0000000000000000000000000000000000000000') {
-          socket.emit('gameResolution', { gameId, resolved: false });
-        } else {
-          socket.emit('gameResolution', { gameId, error: 'Game not joined' });
-        }
-      } catch (error) {
-        console.error(`Error resolving game ${gameId}:`, error);
-        socket.emit('gameResolution', { gameId, error: error.message });
+      console.log('Resolving game:', gameId, 'for account:', account.toLowerCase());
+      const resolvedGame = resolvedGames.find(g => g.gameId === gameId);
+      if (!resolvedGame) {
+        socket.emit('gameResolution', { gameId, error: 'Game not found' });
+        return;
+      }
+      if (resolvedGame.resolved) {
+        socket.emit('gameResolution', {
+          gameId,
+          winner: resolvedGame.winner,
+          tokenId1: resolvedGame.tokenId1,
+          tokenId2: resolvedGame.tokenId2,
+          image1: resolvedGame.image1,
+          image2: resolvedGame.image2,
+          resolved: true
+        });
+        resolvedGames = resolvedGames.map(g => 
+          g.gameId === gameId ? { 
+            ...g, 
+            userResolved: { 
+              ...g.userResolved, 
+              [account.toLowerCase()]: true 
+            } 
+          } : g
+        );
+        saveResolvedGamesToDisk();
+      } else {
+        socket.emit('gameResolution', { gameId, resolved: false });
       }
     });
 
     socket.on('markGamesViewed', ({ account, gameIds }) => {
-      console.log('Marking games viewed for account:', account, 'gameIds:', gameIds);
+      console.log('Marking games viewed for account:', account.toLowerCase(), 'gameIds:', gameIds);
       resolvedGames = resolvedGames.map(game => 
         gameIds.includes(game.gameId) && 
         (game.player1.toLowerCase() === account.toLowerCase() || 
          (game.player2 && game.player2.toLowerCase() === account.toLowerCase())) 
-          ? { ...game, viewed: true } 
+          ? { 
+              ...game, 
+              viewed: { 
+                ...game.viewed, 
+                [account.toLowerCase()]: true 
+              } 
+            } 
           : game
       );
       saveResolvedGamesToDisk();
