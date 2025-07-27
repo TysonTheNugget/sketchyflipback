@@ -29,18 +29,23 @@ const gameABI = [
 
 const nftABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 
-// Persistent game Serves as a file storage for our CMS
+// Persistent game state with user tracking
 let openGames = [];
 let resolvedGames = [];
 let userSessions = new Map(); // Map<address, socketId>
-const dataDir = '/var/data'; // Updated to Render's persistent disk mount path
+const dataDir = '/data';
 const gamesFile = path.join(dataDir, 'games.json');
 const resolvedGamesFile = path.join(dataDir, 'resolved_games.json');
 const resolvedGamesByUserFile = path.join(dataDir, 'resolved_games_by_user.json');
 
 // Ensure the data folder exists
 if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+    try {
+        fs.mkdirSync(dataDir, { recursive: true });
+    } catch (e) {
+        console.error('❌ Error creating /data:', e);
+        process.exit(1);
+    }
 }
 
 // Load games from disk
@@ -48,9 +53,9 @@ function loadGamesFromDisk() {
     if (fs.existsSync(gamesFile)) {
         try {
             openGames = JSON.parse(fs.readFileSync(gamesFile));
-            console.log('✅ Loaded open games from disk');
+            console.log('✅ Loaded open games from /data/games.json');
         } catch (e) {
-            console.error('❌ Error loading open games from disk:', e);
+            console.error('❌ Error loading open games from /data/games.json:', e);
         }
     }
 }
@@ -59,9 +64,9 @@ function loadGamesFromDisk() {
 function saveGamesToDisk() {
     try {
         fs.writeFileSync(gamesFile, JSON.stringify(openGames, null, 2));
-        console.log('✅ Saved open games to disk');
+        console.log('✅ Saved open games to /data/games.json');
     } catch (e) {
-        console.error('❌ Error saving open games to disk:', e);
+        console.error('❌ Error saving open games to /data/games.json:', e);
     }
 }
 
@@ -70,9 +75,9 @@ function loadResolvedGamesFromDisk() {
     if (fs.existsSync(resolvedGamesFile)) {
         try {
             resolvedGames = JSON.parse(fs.readFileSync(resolvedGamesFile));
-            console.log('✅ Loaded resolved games from disk');
+            console.log('✅ Loaded resolved games from /data/resolved_games.json');
         } catch (e) {
-            console.error('❌ Error loading resolved games from disk:', e);
+            console.error('❌ Error loading resolved games from /data/resolved_games.json:', e);
         }
     }
 }
@@ -81,9 +86,9 @@ function loadResolvedGamesFromDisk() {
 function saveResolvedGamesToDisk() {
     try {
         fs.writeFileSync(resolvedGamesFile, JSON.stringify(resolvedGames, null, 2));
-        console.log('✅ Saved resolved games to disk');
+        console.log('✅ Saved resolved games to /data/resolved_games.json');
     } catch (e) {
-        console.error('❌ Error saving resolved games to disk:', e);
+        console.error('❌ Error saving resolved games to /data/resolved_games.json:', e);
     }
 }
 
@@ -93,7 +98,7 @@ function loadResolvedGamesByUser() {
     try {
         return JSON.parse(fs.readFileSync(resolvedGamesByUserFile));
     } catch (e) {
-        console.error('❌ Error loading resolved games by user from disk:', e);
+        console.error('❌ Error loading resolved games by user from /data/resolved_games_by_user.json:', e);
         return {};
     }
 }
@@ -102,9 +107,9 @@ function loadResolvedGamesByUser() {
 function saveResolvedGamesByUser(data) {
     try {
         fs.writeFileSync(resolvedGamesByUserFile, JSON.stringify(data, null, 2));
-        console.log('✅ Saved resolved games by user to disk');
+        console.log('✅ Saved resolved games by user to /data/resolved_games_by_user.json');
     } catch (e) {
-        console.error('❌ Error saving resolved games by user to disk:', e);
+        console.error('❌ Error saving resolved games by user to /data/resolved_games_by_user.json:', e);
     }
 }
 
@@ -316,33 +321,6 @@ async function initializeContract() {
             } : game
         );
         saveResolvedGamesToDisk();
-        const game = resolvedGames.find(g => g.gameId === gameId.toString());
-        if (game) {
-            const player1Socket = userSessions.get(game.player1);
-            const player2Socket = game.player2 ? userSessions.get(game.player2) : null;
-            if (player1Socket) {
-                io.to(player1Socket).emit('gameResolution', {
-                    gameId: game.gameId,
-                    winner: game.winner,
-                    tokenId1: game.tokenId1,
-                    tokenId2: game.tokenId2,
-                    image1: game.image1,
-                    image2: game.image2,
-                    resolved: true
-                });
-            }
-            if (player2Socket) {
-                io.to(player2Socket).emit('gameResolution', {
-                    gameId: game.gameId,
-                    winner: game.winner,
-                    tokenId1: game.tokenId1,
-                    tokenId2: game.tokenId2,
-                    image1: game.image1,
-                    image2: game.image2,
-                    resolved: true
-                });
-            }
-        }
         await fetchOpenGames();
     });
 
