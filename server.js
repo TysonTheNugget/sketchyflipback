@@ -32,8 +32,10 @@ const nftABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 // Persistent game state
 let openGames = [];
 let resolvedGames = [];
+let historyGames = [];
 const gamesFile = path.join('/var/data', 'games.json');
 const resolvedGamesFile = path.join('/var/data', 'resolved_games.json');
+const historyGamesFile = path.join('/var/data', 'history_games.json');
 
 // Ensure the data folder exists
 if (!fs.existsSync('/var/data')) {
@@ -84,6 +86,28 @@ function saveResolvedGamesToDisk() {
   }
 }
 
+// Load history games from disk
+function loadHistoryGamesFromDisk() {
+  if (fs.existsSync(historyGamesFile)) {
+    try {
+      historyGames = JSON.parse(fs.readFileSync(historyGamesFile));
+      console.log('✅ Loaded history games from disk');
+    } catch (e) {
+      console.error('❌ Error loading history games from disk:', e);
+    }
+  }
+}
+
+// Save history games to disk
+function saveHistoryGamesToDisk() {
+  try {
+    fs.writeFileSync(historyGamesFile, JSON.stringify(historyGames, null, 2));
+    console.log('✅ Saved history games to disk');
+  } catch (e) {
+    console.error('❌ Error saving history games to disk:', e);
+  }
+}
+
 async function setupProvider() {
   let provider;
   try {
@@ -113,6 +137,7 @@ async function initializeContract() {
   // Load games from disk on startup
   loadGamesFromDisk();
   loadResolvedGamesFromDisk();
+  loadHistoryGamesFromDisk();
 
   // Fetch open games
   async function fetchOpenGames() {
@@ -160,7 +185,7 @@ async function initializeContract() {
       const response = await fetch(uri);
       const metadata = await response.json();
       let image = metadata.image;
-      if (image.startsWith('ipfs://')) image = 'https://ipfs.io/ipfs/' + metadata.image.slice(7);
+      if (image.startsWith('ipfs://')) image = 'https://ipfs.io/ipfs/' + image.slice(7);
       return image;
     } catch (error) {
       console.error(`Error fetching image for token ${tokenId}:`, error);
@@ -236,7 +261,9 @@ async function initializeContract() {
   contract.on('GameCanceled', async (gameId) => {
     console.log('GameCanceled:', gameId.toString());
     resolvedGames = resolvedGames.filter(game => game.gameId !== gameId.toString());
+    historyGames = historyGames.filter(game => game.gameId !== gameId.toString());
     saveResolvedGamesToDisk();
+    saveHistoryGamesToDisk();
     await fetchOpenGames();
   });
 
@@ -281,8 +308,8 @@ async function initializeContract() {
               const image1 = await getNFTImage(game.tokenId1);
               const image2 = await getNFTImage(game.tokenId2);
               const winner = game.data && game.data.length > 0 ? 
-                (ethers.utils.hexZeroPad(ethers.utils.hexStripZeros(game.data), 20).toLowerCase()) : 
-                '0x0000000000000000000000000000000000000000';
+                ethers.utils.hexZeroPad(ethers.utils.hexStripZeros(game.data), 20).toLowerCase() : 
+                null;
               resolvedGames.push({
                 gameId: i.toString(),
                 player1: game.player1,
@@ -292,7 +319,7 @@ async function initializeContract() {
                 tokenId2: game.tokenId2.toString(),
                 image2,
                 resolved: true,
-                winner: winner !== '0x0000000000000000000000000000000000000000' ? winner : null,
+                winner,
                 userResolved: {
                   [game.player1.toLowerCase()]: false,
                   [game.player2.toLowerCase()]: false
@@ -319,8 +346,17 @@ async function initializeContract() {
       }
     });
 
-    socket.on('resolveGame', async ({ gameId, account }) => {
-      console.log('Resolving game:', gameId, 'for account:', account.toLowerCase());
+    socket.on('fetchHistory', ({ account }) => {
+      console.log('Fetching history for account:', account.toLowerCase());
+      const userHistory = historyGames.filter(game => 
+        game.player1.toLowerCase() === account.toLowerCase() || 
+        (game.player2 && game.player2.toLowerCase() === account.toLowerCase())
+      );
+      socket.emit('historyGames', userHistory);
+    });
+
+    socket.on('resolveAndMoveToHistory', async ({ gameId, account }) => {
+      console.log('Resolving and moving game to history:', gameId, 'for account:', account.toLowerCase());
       let resolvedGame = resolvedGames.find(g => g.gameId === gameId);
       if (!resolvedGame) {
         // Fallback: check contract
@@ -374,20 +410,29 @@ async function initializeContract() {
           image2: resolvedGame.image2,
           resolved: true
         });
+        // Move to history
+        historyGames.push({
+          ...resolvedGame,
+          userResolved: {
+            ...resolvedGame.userResolved,
+            [account.toLowerCase()]: true
+          },
+          viewed: {
+            ...resolvedGame.viewed,
+            [account.toLowerCase()]: true
+          }
+        });
+        resolvedGames = resolvedGames.filter(g => g.gameId !== gameId);
+        saveResolvedGamesToDisk();
+        saveHistoryGamesToDisk();
+        const userGames = resolvedGames.filter(game => 
+          game.player1.toLowerCase() === account.toLowerCase() || 
+          (game.player2 && game.player2.toLowerCase() === account.toLowerCase())
+        );
+        socket.emit('resolvedGames', userGames);
       } else {
         socket.emit('gameResolution', { gameId, resolved: false });
       }
-    });
-
-    socket.on('removeGame', ({ gameId, account }) => {
-      console.log('Removing game:', gameId, 'for account:', account.toLowerCase());
-      resolvedGames = resolvedGames.filter(game => game.gameId !== gameId);
-      saveResolvedGamesToDisk();
-      const userGames = resolvedGames.filter(game => 
-        game.player1.toLowerCase() === account.toLowerCase() || 
-        (game.player2 && game.player2.toLowerCase() === account.toLowerCase())
-      );
-      socket.emit('resolvedGames', userGames);
     });
 
     socket.on('markGamesViewed', ({ account, gameIds }) => {
