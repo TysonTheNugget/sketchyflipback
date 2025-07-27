@@ -10,14 +10,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: ['https://sketchyflips.vercel.app', 'http://localhost:10000'],
+        origin: ['https://sketchyflips.vercel.app', 'http://localhost:3000'],
         methods: ['GET', 'POST']
     }
 });
-
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.static(__dirname));
 
 const gameAddress = '0xf6b8d2E0d36669Ed82059713BDc6ACfABe11Fde6';
 const gameABI = [
@@ -131,6 +127,7 @@ async function initializeContract() {
                         let uri = await nftContract.tokenURI(game.tokenId1);
                         if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
                         const response = await fetch(uri);
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                         const metadata = await response.json();
                         image = metadata.image.startsWith('ipfs://') ? 'https://ipfs.io/ipfs/' + metadata.image.slice(7) : metadata.image;
                     } catch (error) {
@@ -447,7 +444,7 @@ async function initializeContract() {
 }
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.json({ status: 'Sketchy Flips Backend Running' });
 });
 
 const PORT = process.env.PORT || 10000;
