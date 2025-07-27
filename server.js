@@ -31,7 +31,9 @@ const nftABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 
 // Persistent game state
 let openGames = [];
-const gamesFile = path.join('/var/data', 'games.json'); // Render disk mount path
+let resolvedGames = [];
+const gamesFile = path.join('/var/data', 'games.json');
+const resolvedGamesFile = path.join('/var/data', 'resolved_games.json');
 
 // Ensure the data folder exists
 if (!fs.existsSync('/var/data')) {
@@ -45,7 +47,7 @@ function loadGamesFromDisk() {
       openGames = JSON.parse(fs.readFileSync(gamesFile));
       console.log('✅ Loaded open games from disk');
     } catch (e) {
-      console.error('❌ Error loading games from disk:', e);
+      console.error('❌ Error loading open games from disk:', e);
     }
   }
 }
@@ -56,7 +58,29 @@ function saveGamesToDisk() {
     fs.writeFileSync(gamesFile, JSON.stringify(openGames, null, 2));
     console.log('✅ Saved open games to disk');
   } catch (e) {
-    console.error('❌ Error saving games to disk:', e);
+    console.error('❌ Error saving open games to disk:', e);
+  }
+}
+
+// Load resolved games from disk
+function loadResolvedGamesFromDisk() {
+  if (fs.existsSync(resolvedGamesFile)) {
+    try {
+      resolvedGames = JSON.parse(fs.readFileSync(resolvedGamesFile));
+      console.log('✅ Loaded resolved games from disk');
+    } catch (e) {
+      console.error('❌ Error loading resolved games from disk:', e);
+    }
+  }
+}
+
+// Save resolved games to disk
+function saveResolvedGamesToDisk() {
+  try {
+    fs.writeFileSync(resolvedGamesFile, JSON.stringify(resolvedGames, null, 2));
+    console.log('✅ Saved resolved games to disk');
+  } catch (e) {
+    console.error('❌ Error saving resolved games to disk:', e);
   }
 }
 
@@ -66,10 +90,10 @@ async function setupProvider() {
     provider = new ethers.providers.WebSocketProvider(process.env.ALCHEMY_WSS_URL);
     provider.on('error', (error) => {
       console.error('WebSocket error:', error);
-      setTimeout(setupProvider, 5000); // Retry after 5 seconds
+      setTimeout(setupProvider, 5000);
     });
-    provider.on('close', () => {
-      console.log('WebSocket closed, reconnecting...');
+    provider.on('close', (code, reason) => {
+      console.log(`WebSocket closed with code ${code}, reason: ${reason || 'unknown'}`);
       setTimeout(setupProvider, 5000);
     });
   } catch (error) {
@@ -88,6 +112,7 @@ async function initializeContract() {
 
   // Load games from disk on startup
   loadGamesFromDisk();
+  loadResolvedGamesFromDisk();
 
   // Fetch open games
   async function fetchOpenGames() {
@@ -97,7 +122,7 @@ async function initializeContract() {
       for (let id of openIds) {
         try {
           const game = await contract.getGame(id);
-          let image = 'https://via.placeholder.com/80'; // Fallback image
+          let image = 'https://via.placeholder.com/80';
           try {
             let uri = await nftContract.tokenURI(game.tokenId1);
             if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
@@ -121,7 +146,7 @@ async function initializeContract() {
       }
       console.log('Broadcasting open games:', openGames);
       io.emit('openGamesUpdate', openGames);
-      saveGamesToDisk(); // Save to disk after fetching
+      saveGamesToDisk();
     } catch (error) {
       console.error('Error fetching open games:', error);
     }
@@ -135,51 +160,120 @@ async function initializeContract() {
 
   contract.on('GameJoined', async (gameId, player2, tokenId2) => {
     console.log('GameJoined:', gameId.toString(), 'Player:', player2);
+    const game = await contract.getGame(gameId);
+    io.emit('gameJoined', {
+      gameId: gameId.toString(),
+      player1: game.player1,
+      tokenId1: game.tokenId1.toString(),
+      player2,
+      tokenId2: tokenId2.toString(),
+      joinTimestamp: game.joinTimestamp.toString()
+    });
     await fetchOpenGames();
+    resolvedGames.push({
+      gameId: gameId.toString(),
+      player1: game.player1,
+      tokenId1: game.tokenId1.toString(),
+      player2,
+      tokenId2: tokenId2.toString(),
+      resolved: false
+    });
+    saveResolvedGamesToDisk();
   });
 
   contract.on('GameResolved', async (gameId, winner, tokenId1, tokenId2) => {
     console.log('GameResolved:', gameId.toString(), 'Winner:', winner);
-    await fetchOpenGames();
+    resolvedGames = resolvedGames.map(game => 
+      game.gameId === gameId.toString() ? { ...game, winner, resolved: true } : game
+    );
+    saveResolvedGamesToDisk();
     io.emit('gameResolved', {
       gameId: gameId.toString(),
       winner,
       tokenId1: tokenId1.toString(),
       tokenId2: tokenId2.toString()
     });
+    await fetchOpenGames();
   });
 
   contract.on('GameCanceled', async (gameId) => {
     console.log('GameCanceled:', gameId.toString());
+    resolvedGames = resolvedGames.filter(game => game.gameId !== gameId.toString());
+    saveResolvedGamesToDisk();
     await fetchOpenGames();
   });
 
   // Initial fetch
   await fetchOpenGames();
 
+  // Periodically fetch open games to sync with blockchain
+  setInterval(async () => {
+    console.log('Periodic fetch of open games');
+    await fetchOpenGames();
+  }, 60000);
+
   // Periodically emit openGames to keep clients synced
   setInterval(() => {
     console.log('Emitting periodic openGamesUpdate');
     io.emit('openGamesUpdate', openGames);
-  }, 10000); // Every 10 seconds
-}
+  }, 10000);
 
-io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-  socket.emit('openGamesUpdate', openGames); // Send immediately on connect
-  setTimeout(() => {
-    socket.emit('openGamesUpdate', openGames); // Send again after 3 seconds
-  }, 3000);
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+  // Socket.IO event listeners
+  io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
+    socket.emit('openGamesUpdate', openGames);
+    setTimeout(() => {
+      socket.emit('openGamesUpdate', openGames);
+    }, 3000);
+
+    socket.on('fetchResolvedGames', ({ account }) => {
+      console.log('Fetching resolved games for account:', account);
+      const userGames = resolvedGames.filter(game => 
+        game.player1.toLowerCase() === account.toLowerCase() || 
+        game.player2.toLowerCase() === account.toLowerCase()
+      );
+      socket.emit('resolvedGames', userGames);
+    });
+
+    socket.on('resolveGame', async ({ gameId, account }) => {
+      console.log('Resolving game:', gameId, 'for account:', account);
+      try {
+        const game = await contract.getGame(gameId);
+        if (!game.active) {
+          const resolvedGame = resolvedGames.find(g => g.gameId === gameId);
+          if (resolvedGame && resolvedGame.winner) {
+            socket.emit('gameResolution', {
+              gameId,
+              winner: resolvedGame.winner,
+              tokenId1: resolvedGame.tokenId1,
+              tokenId2: resolvedGame.tokenId2,
+              resolved: true
+            });
+          } else {
+            socket.emit('gameResolution', { gameId, error: 'Game resolved but no winner found' });
+          }
+        } else if (game.player2 !== '0x0000000000000000000000000000000000000000') {
+          socket.emit('gameResolution', { gameId, resolved: false });
+        } else {
+          socket.emit('gameResolution', { gameId, error: 'Game not joined' });
+        }
+      } catch (error) {
+        console.error(`Error resolving game ${gameId}:`, error);
+        socket.emit('gameResolution', { gameId, error: error.message });
+      }
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+    });
   });
-});
+}
 
 app.get('/', (req, res) => {
   res.send('Sketchy Flips Backend');
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   initializeContract();
