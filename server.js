@@ -35,18 +35,22 @@ const daycareABI = [{"inputs":[{"internalType":"address","name":"_nftAddress","t
 // Persistent game storage
 let openGames = [];
 let resolvedGames = [];
-let userSessions = new Map();
+let userSessions = new Map(); // Map<address, socketId>
 const dataDir = '/var/data';
 const gamesFile = path.join(dataDir, 'games.json');
 const resolvedGamesFile = path.join(dataDir, 'resolved_games.json');
 const resolvedGamesByUserFile = path.join(dataDir, 'resolved_games_by_user.json');
-let leaderboard = [];
+
+// Daycare storage
+let leaderboard = []; // Array of { address: string, points: string }
 const leaderboardFile = path.join(dataDir, 'leaderboard.json');
 
+// Ensure the data folder exists
 if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
 }
 
+// Load games from disk
 function loadGamesFromDisk() {
     if (fs.existsSync(gamesFile)) {
         try {
@@ -58,6 +62,7 @@ function loadGamesFromDisk() {
     }
 }
 
+// Save games to disk
 function saveGamesToDisk() {
     try {
         fs.writeFileSync(gamesFile, JSON.stringify(openGames, null, 2));
@@ -67,6 +72,7 @@ function saveGamesToDisk() {
     }
 }
 
+// Load resolved games from disk
 function loadResolvedGamesFromDisk() {
     if (fs.existsSync(resolvedGamesFile)) {
         try {
@@ -78,6 +84,7 @@ function loadResolvedGamesFromDisk() {
     }
 }
 
+// Save resolved games to disk
 function saveResolvedGamesToDisk() {
     try {
         fs.writeFileSync(resolvedGamesFile, JSON.stringify(resolvedGames, null, 2));
@@ -87,6 +94,7 @@ function saveResolvedGamesToDisk() {
     }
 }
 
+// Load resolved games by user from disk
 function loadResolvedGamesByUser() {
     if (!fs.existsSync(resolvedGamesByUserFile)) return {};
     try {
@@ -97,6 +105,7 @@ function loadResolvedGamesByUser() {
     }
 }
 
+// Save resolved games by user to disk
 function saveResolvedGamesByUser(data) {
     try {
         fs.writeFileSync(resolvedGamesByUserFile, JSON.stringify(data, null, 2));
@@ -108,6 +117,7 @@ function saveResolvedGamesByUser(data) {
 
 let resolvedGamesByUser = loadResolvedGamesByUser();
 
+// Load leaderboard from disk
 function loadLeaderboardFromDisk() {
     if (fs.existsSync(leaderboardFile)) {
         try {
@@ -119,6 +129,7 @@ function loadLeaderboardFromDisk() {
     }
 }
 
+// Save leaderboard to disk
 function saveLeaderboardToDisk() {
     try {
         fs.writeFileSync(leaderboardFile, JSON.stringify(leaderboard, null, 2));
@@ -155,10 +166,12 @@ async function initializeContract() {
     const nftContract = new ethers.Contract(nftAddress, nftABI, provider);
     const daycareContract = new ethers.Contract(daycareAddress, daycareABI, provider);
 
+    // Load data from disk on startup
     loadGamesFromDisk();
     loadResolvedGamesFromDisk();
     loadLeaderboardFromDisk();
 
+    // Fetch open games
     async function fetchOpenGames() {
         try {
             const openIds = await contract.getOpenGames();
@@ -197,6 +210,7 @@ async function initializeContract() {
         }
     }
 
+    // Fetch resolved games for an account
     async function fetchResolvedGamesForAccount(accountLower) {
         try {
             resolvedGames = resolvedGames.filter(game => 
@@ -256,6 +270,7 @@ async function initializeContract() {
         }
     }
 
+    // Fetch NFT image
     async function getNFTImage(tokenId) {
         try {
             let uri = await nftContract.tokenURI(tokenId);
@@ -274,6 +289,7 @@ async function initializeContract() {
         }
     }
 
+    // Fetch leaderboard
     async function fetchLeaderboard() {
         try {
             const [addresses, points] = await daycareContract.getLeaderboard();
@@ -289,6 +305,7 @@ async function initializeContract() {
         }
     }
 
+    // Fetch user daycare data (points, staked NFTs with images and pending points)
     async function fetchUserDaycare(account) {
         const accountLower = account.toLowerCase();
         try {
@@ -315,6 +332,7 @@ async function initializeContract() {
         }
     }
 
+    // Event listeners for games
     contract.on('GameCreated', async (gameId, player1, tokenId1) => {
         console.log('GameCreated:', gameId.toString(), 'Player:', player1);
         await fetchOpenGames();
@@ -372,6 +390,7 @@ async function initializeContract() {
             } : game
         );
         saveResolvedGamesToDisk();
+        // Removed global or multi-client gameResolution emissions
         await fetchOpenGames();
     });
 
@@ -382,6 +401,7 @@ async function initializeContract() {
         await fetchOpenGames();
     });
 
+    // Event listeners for daycare
     daycareContract.on('Claimed', async (user, amount) => {
         console.log('Claimed:', user.toLowerCase(), 'Amount:', amount.toString());
         await fetchLeaderboard();
@@ -435,21 +455,25 @@ async function initializeContract() {
         }
     });
 
+    // Initial fetches
     await fetchOpenGames();
     await fetchLeaderboard();
 
+    // Periodically fetch open games and leaderboard
     setInterval(async () => {
         console.log('Periodic fetch of open games and leaderboard');
         await fetchOpenGames();
         await fetchLeaderboard();
     }, 60000);
 
+    // Socket.IO event listeners
     io.on('connection', (socket) => {
         console.log('Client connected:', socket.id);
 
         socket.on('registerAddress', ({ address }) => {
             console.log(`Registering address ${address} with socket ${socket.id}`);
             userSessions.set(address.toLowerCase(), socket.id);
+            // Send initial updates
             socket.emit('openGamesUpdate', openGames);
             socket.emit('leaderboardUpdate', leaderboard);
         });
@@ -473,16 +497,12 @@ async function initializeContract() {
             socket.emit('userDaycareUpdate', userData);
         });
 
-        socket.on('refreshLeaderboard', async () => {
-            console.log('Refreshing leaderboard on client request');
-            await fetchLeaderboard();
-        });
-
         socket.on('resolveGame', async ({ gameId, account }) => {
             const accountLower = account.toLowerCase();
             console.log('Resolving game:', gameId, 'for account:', accountLower);
             let resolvedGame = resolvedGames.find(g => g.gameId === gameId);
             if (!resolvedGame) {
+                // Fallback: check contract
                 try {
                     const game = await contract.getGame(gameId);
                     if (game.player1.toLowerCase() === accountLower || 
@@ -532,6 +552,7 @@ async function initializeContract() {
                 saveResolvedGamesByUser(resolvedGamesByUser);
             }
             if (resolvedGame.resolved && resolvedGame.winner) {
+                // Emit ONLY to the resolving socket
                 socket.emit('gameResolution', {
                     gameId,
                     winner: resolvedGame.winner,
@@ -541,6 +562,7 @@ async function initializeContract() {
                     image2: resolvedGame.image2,
                     resolved: true
                 });
+                // Remove the game for the user
                 resolvedGames = resolvedGames.filter(g => g.gameId !== gameId);
                 saveResolvedGamesToDisk();
                 const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
