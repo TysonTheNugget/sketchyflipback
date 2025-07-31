@@ -225,9 +225,11 @@ async function initializeContract() {
                         !resolvedGames.some(g => g.gameId === i.toString())) {
                         const image1 = await getNFTImage(game.tokenId1);
                         const image2 = await getNFTImage(game.tokenId2);
-                        const winner = game.data && game.data.length > 0 ? 
-                            ethers.utils.hexZeroPad(ethers.utils.hexStripZeros(game.data), 20).toLowerCase() : 
-                            null;
+                        let winner = null;
+                        if (game.data && game.data.length > 0) {
+                            const random = BigInt(game.data);
+                            winner = (random % 2n === 0n) ? game.player1.toLowerCase() : (game.player2 ? game.player2.toLowerCase() : null);
+                        }
                         resolvedGames.push({
                             gameId: i.toString(),
                             player1: game.player1.toLowerCase(),
@@ -509,9 +511,11 @@ async function initializeContract() {
                         (game.player2 && game.player2.toLowerCase() === accountLower)) {
                         const image1 = await getNFTImage(game.tokenId1);
                         const image2 = await getNFTImage(game.tokenId2);
-                        const winner = game.data && game.data.length > 0 ? 
-                            ethers.utils.hexZeroPad(ethers.utils.hexStripZeros(game.data), 20).toLowerCase() : 
-                            null;
+                        let winner = null;
+                        if (game.data && game.data.length > 0) {
+                            const random = BigInt(game.data);
+                            winner = (random % 2n === 0n) ? game.player1.toLowerCase() : (game.player2 ? game.player2.toLowerCase() : null);
+                        }
                         resolvedGame = {
                             gameId: gameId.toString(),
                             player1: game.player1.toLowerCase(),
