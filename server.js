@@ -479,17 +479,12 @@ async function initializeContract() {
     await fetchOpenGames();
     await fetchLeaderboard();
 
-    // Periodically fetch open games
+    // Periodically fetch open games and leaderboard
     setInterval(async () => {
-        console.log('Periodic fetch of open games');
+        console.log('Periodic fetch of open games and leaderboard');
         await fetchOpenGames();
-    }, 60000); // 
-
-    // Periodically fetch leaderboard
-    setInterval(async () => {
-        console.log('Periodic fetch of leaderboard');
         await fetchLeaderboard();
-    }, 600000); // 10 minutes
+    }, 600000);
 
     // Socket.IO event listeners
     io.on('connection', (socket) => {
