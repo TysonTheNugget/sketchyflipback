@@ -410,6 +410,40 @@ async function initializeContract() {
             } : game
         );
         saveResolvedGamesToDisk();
+        const updatedGame = resolvedGames.find(g => g.gameId === gameId.toString());
+        if (updatedGame) {
+            const data = {
+                gameId: updatedGame.gameId,
+                winner: updatedGame.winner,
+                tokenId1: updatedGame.tokenId1,
+                tokenId2: updatedGame.tokenId2,
+                image1: updatedGame.image1,
+                image2: updatedGame.image2,
+                resolved: true
+            };
+            ['player1', 'player2'].forEach(playerKey => {
+                const player = updatedGame[playerKey];
+                if (player) {
+                    const socketId = userSessions.get(player);
+                    if (socketId) {
+                        io.to(socketId).emit('gameResolution', data);
+                        updatedGame.userResolved[player] = true;
+                        updatedGame.viewed[player] = true;
+                        if (!resolvedGamesByUser[player]) resolvedGamesByUser[player] = [];
+                        if (!resolvedGamesByUser[player].includes(updatedGame.gameId)) {
+                            resolvedGamesByUser[player].push(updatedGame.gameId);
+                        }
+                    }
+                }
+            });
+            saveResolvedGamesToDisk();
+            saveResolvedGamesByUser(resolvedGamesByUser);
+            const allResolved = Object.values(updatedGame.userResolved).every(v => v);
+            if (allResolved) {
+                resolvedGames = resolvedGames.filter(g => g.gameId !== updatedGame.gameId);
+                saveResolvedGamesToDisk();
+            }
+        }
         // Removed global or multi-client gameResolution emissions
         await fetchOpenGames();
     });
