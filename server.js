@@ -223,31 +223,13 @@ async function initializeContract() {
                         (game.player1.toLowerCase() === accountLower || 
                          (game.player2 && game.player2.toLowerCase() === accountLower)) &&
                         !resolvedGames.some(g => g.gameId === i.toString())) {
-                        // Only add if joined and resolved (has GameResolved event)
-                        if (game.player2 === ethers.constants.AddressZero) continue; // Not joined, skip
-                        
-                        // Query GameResolved event for winner
-                        const topic = ethers.utils.id('GameResolved(uint256,address,uint256,uint256)');
-                        const filter = {
-                            address: gameAddress,
-                            topics: [
-                                topic,
-                                ethers.utils.hexZeroPad(ethers.utils.hexValue(i), 32)
-                            ]
-                        };
-                        const logs = await provider.getLogs(filter);
-                        let winner = null;
-                        if (logs.length > 0) {
-                            const log = logs[0];
-                            const event = contract.interface.parseLog(log);
-                            winner = event.args.winner.toLowerCase();
-                        } else {
-                            // No resolved event, perhaps canceled, skip adding
-                            continue;
-                        }
-
                         const image1 = await getNFTImage(game.tokenId1);
                         const image2 = await getNFTImage(game.tokenId2);
+                        let winner = null;
+                        if (game.data && game.data.length > 0) {
+                            const random = BigInt(game.data);
+                            winner = (random % 2n === 0n) ? game.player1.toLowerCase() : (game.player2 ? game.player2.toLowerCase() : null);
+                        }
                         resolvedGames.push({
                             gameId: i.toString(),
                             player1: game.player1.toLowerCase(),
@@ -527,31 +509,13 @@ async function initializeContract() {
                     const game = await contract.getGame(gameId);
                     if (game.player1.toLowerCase() === accountLower || 
                         (game.player2 && game.player2.toLowerCase() === accountLower)) {
-                        if (game.player2 === ethers.constants.AddressZero) {
-                            socket.emit('gameResolution', { gameId, error: 'Game not joined' });
-                            return;
-                        }
-                        // Query GameResolved event for winner
-                        const topic = ethers.utils.id('GameResolved(uint256,address,uint256,uint256)');
-                        const filter = {
-                            address: gameAddress,
-                            topics: [
-                                topic,
-                                ethers.utils.hexZeroPad(ethers.utils.hexValue(gameId), 32)
-                            ]
-                        };
-                        const logs = await provider.getLogs(filter);
-                        let winner = null;
-                        if (logs.length > 0) {
-                            const log = logs[0];
-                            const event = contract.interface.parseLog(log);
-                            winner = event.args.winner.toLowerCase();
-                        } else {
-                            socket.emit('gameResolution', { gameId, error: 'Game not resolved or canceled' });
-                            return;
-                        }
                         const image1 = await getNFTImage(game.tokenId1);
                         const image2 = await getNFTImage(game.tokenId2);
+                        let winner = null;
+                        if (game.data && game.data.length > 0) {
+                            const random = BigInt(game.data);
+                            winner = (random % 2n === 0n) ? game.player1.toLowerCase() : (game.player2 ? game.player2.toLowerCase() : null);
+                        }
                         resolvedGame = {
                             gameId: gameId.toString(),
                             player1: game.player1.toLowerCase(),
@@ -602,13 +566,9 @@ async function initializeContract() {
                     image2: resolvedGame.image2,
                     resolved: true
                 });
-                // Check if all players have resolved
-                const allResolved = Object.values(resolvedGame.userResolved).every(v => v);
-                if (allResolved) {
-                    // Remove the game for all users
-                    resolvedGames = resolvedGames.filter(g => g.gameId !== gameId);
-                    saveResolvedGamesToDisk();
-                }
+                // Remove the game for the user
+                resolvedGames = resolvedGames.filter(g => g.gameId !== gameId);
+                saveResolvedGamesToDisk();
                 const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
                 const userGames = resolvedGames.filter(game => 
                     (game.player1 === accountLower || 
