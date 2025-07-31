@@ -484,7 +484,7 @@ async function initializeContract() {
         console.log('Periodic fetch of open games and leaderboard');
         await fetchOpenGames();
         await fetchLeaderboard();
-    }, 60000);
+    }, 300000);
 
     // Socket.IO event listeners
     io.on('connection', (socket) => {
