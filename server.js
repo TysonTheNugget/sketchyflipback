@@ -179,7 +179,8 @@ async function initializeContract() {
             for (let id of openIds) {
                 try {
                     const game = await contract.getGame(id);
-                    let image = 'https://via.placeholder.com/80';
+                    if (game.tokenId1.toString() === '0') continue;  // Skip invalid token ID 0
+                    let image = 'https://placehold.co/80x80';
                     try {
                         let uri = await nftContract.tokenURI(game.tokenId1);
                         if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
@@ -210,48 +211,44 @@ async function initializeContract() {
         }
     }
 
-    // Fetch resolved games for an account
+    // Fetch resolved games for an account - Replaced polling with event query
     async function fetchResolvedGamesForAccount(accountLower) {
         try {
             resolvedGames = resolvedGames.filter(game => 
                 game.player1 === accountLower || (game.player2 && game.player2 === accountLower)
             );
-            for (let i = 0; i < 1000; i++) {
-                try {
-                    const game = await contract.getGame(i);
-                    if (!game.active && 
-                        (game.player1.toLowerCase() === accountLower || 
-                         (game.player2 && game.player2.toLowerCase() === accountLower)) &&
-                        !resolvedGames.some(g => g.gameId === i.toString())) {
-                        const image1 = await getNFTImage(game.tokenId1);
-                        const image2 = await getNFTImage(game.tokenId2);
-                        let winner = null;
-                        if (game.data && game.data.length > 0) {
-                            const random = BigInt(game.data);
-                            winner = (random % 2n === 0n) ? game.player1.toLowerCase() : (game.player2 ? game.player2.toLowerCase() : null);
+            // Query GameResolved events instead of polling 0-999
+            const filter = contract.filters.GameResolved(null, null, null, null);
+            const events = await contract.queryFilter(filter, 0, 'latest');
+            for (let event of events) {
+                const { gameId, winner, tokenId1, tokenId2 } = event.args;
+                if (tokenId1.toString() === '0' || tokenId2.toString() === '0') continue;  // Skip invalid tokens
+                const game = await contract.getGame(gameId);
+                if ((game.player1.toLowerCase() === accountLower || 
+                     (game.player2 && game.player2.toLowerCase() === accountLower)) &&
+                    !resolvedGames.some(g => g.gameId === gameId.toString())) {
+                    const image1 = await getNFTImage(tokenId1);
+                    const image2 = await getNFTImage(tokenId2);
+                    let winnerAddr = winner.toLowerCase();
+                    resolvedGames.push({
+                        gameId: gameId.toString(),
+                        player1: game.player1.toLowerCase(),
+                        tokenId1: game.tokenId1.toString(),
+                        image1,
+                        player2: game.player2 ? game.player2.toLowerCase() : null,
+                        tokenId2: game.tokenId2.toString(),
+                        image2,
+                        resolved: true,
+                        winner: winnerAddr,
+                        userResolved: {
+                            [game.player1.toLowerCase()]: false,
+                            [game.player2 ? game.player2.toLowerCase() : '']: false
+                        },
+                        viewed: {
+                            [game.player1.toLowerCase()]: false,
+                            [game.player2 ? game.player2.toLowerCase() : '']: false
                         }
-                        resolvedGames.push({
-                            gameId: i.toString(),
-                            player1: game.player1.toLowerCase(),
-                            tokenId1: game.tokenId1.toString(),
-                            image1,
-                            player2: game.player2 ? game.player2.toLowerCase() : null,
-                            tokenId2: game.tokenId2.toString(),
-                            image2,
-                            resolved: true,
-                            winner,
-                            userResolved: {
-                                [game.player1.toLowerCase()]: false,
-                                [game.player2 ? game.player2.toLowerCase() : '']: false
-                            },
-                            viewed: {
-                                [game.player1.toLowerCase()]: false,
-                                [game.player2 ? game.player2.toLowerCase() : '']: false
-                            }
-                        });
-                    }
-                } catch (e) {
-                    if (e.message.includes('revert') || e.message.includes('out of bounds')) break;
+                    });
                 }
             }
             saveResolvedGamesToDisk();
@@ -274,6 +271,10 @@ async function initializeContract() {
 
     // Fetch NFT image
     async function getNFTImage(tokenId) {
+        if (tokenId === 0 || tokenId.toString() === '0') {
+            console.log(`Skipping invalid token ID 0`);
+            return 'https://placehold.co/64x64';
+        }
         try {
             let uri = await nftContract.tokenURI(tokenId);
             console.log(`Fetching metadata for token ${tokenId}: ${uri}`);
@@ -284,10 +285,10 @@ async function initializeContract() {
             let image = metadata.image;
             console.log(`Image URL for token ${tokenId}: ${image}`);
             if (image && image.startsWith('ipfs://')) image = 'https://ipfs.io/ipfs/' + image.slice(7);
-            return image || 'https://via.placeholder.com/64';
+            return image || 'https://placehold.co/64x64';
         } catch (error) {
             console.error(`Error fetching image for token ${tokenId}:`, error.message);
-            return 'https://via.placeholder.com/64';
+            return 'https://placehold.co/64x64';
         }
     }
 
@@ -314,6 +315,7 @@ async function initializeContract() {
             const points = await daycareContract.getTotalPoints(account);
             const daycares = await daycareContract.getDaycares(account);
             const enhancedDaycares = await Promise.all(daycares.map(async (d, index) => {
+                if (d.tokenId.toString() === '0') return null;  // Skip invalid token ID 0
                 const pending = await daycareContract.getPendingPoints(account, index);
                 const image = await getNFTImage(d.tokenId);
                 return {
@@ -326,7 +328,7 @@ async function initializeContract() {
             }));
             return {
                 points: points.toString(),
-                daycares: enhancedDaycares
+                daycares: enhancedDaycares.filter(d => d !== null)
             };
         } catch (error) {
             console.error(`Error fetching daycare for ${accountLower}:`, error);
@@ -343,6 +345,7 @@ async function initializeContract() {
     contract.on('GameJoined', async (gameId, player2, tokenId2) => {
         console.log('GameJoined:', gameId.toString(), 'Player:', player2);
         const game = await contract.getGame(gameId);
+        if (game.tokenId1.toString() === '0' || tokenId2.toString() === '0') return;  // Skip invalid
         const image1 = await getNFTImage(game.tokenId1);
         const image2 = await getNFTImage(tokenId2);
         const gameData = {
@@ -375,6 +378,7 @@ async function initializeContract() {
 
     contract.on('GameResolved', async (gameId, winner, tokenId1, tokenId2) => {
         console.log('GameResolved:', gameId.toString(), 'Winner:', winner.toLowerCase());
+        if (tokenId1.toString() === '0' || tokenId2.toString() === '0') return;  // Skip invalid
         const image1 = await getNFTImage(tokenId1);
         const image2 = await getNFTImage(tokenId2);
         resolvedGames = resolvedGames.map(game => 
