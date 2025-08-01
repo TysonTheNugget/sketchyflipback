@@ -158,17 +158,7 @@ async function initializeContract() {
             for (let id of openIds) {
                 try {
                     const game = await pollingContract.getGame(id);
-                    let image = 'https://via.placeholder.com/80';
-                    try {
-                        let uri = await pollingNftContract.tokenURI(game.tokenId1);
-                        if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
-                        const response = await fetch(uri);
-                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                        const metadata = await response.json();
-                        image = metadata.image.startsWith('ipfs://') ? 'https://ipfs.io/ipfs/' + metadata.image.slice(7) : metadata.image;
-                    } catch (error) {
-                        console.error(`Error fetching metadata for token ${game.tokenId1}:`, error);
-                    }
+                    const image = `https://f005.backblazeb2.com/file/sketchymilios/${game.tokenId1}.png`;
                     openGames.push({
                         id: id.toString(),
                         player1: game.player1.toLowerCase(),
@@ -268,21 +258,7 @@ async function initializeContract() {
 
     // Fetch NFT image
     async function getNFTImage(tokenId) {
-        try {
-            let uri = await nftContract.tokenURI(tokenId);
-            console.log(`Fetching metadata for token ${tokenId}: ${uri}`);
-            if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
-            const response = await fetch(uri);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const metadata = await response.json();
-            let image = metadata.image;
-            console.log(`Image URL for token ${tokenId}: ${image}`);
-            if (image && image.startsWith('ipfs://')) image = 'https://ipfs.io/ipfs/' + image.slice(7);
-            return image || 'https://via.placeholder.com/64';
-        } catch (error) {
-            console.error(`Error fetching image for token ${tokenId}:`, error.message);
-            return 'https://via.placeholder.com/64';
-        }
+        return `https://f005.backblazeb2.com/file/sketchymilios/${tokenId}.png`;
     }
 
     // Fetch user daycare data
