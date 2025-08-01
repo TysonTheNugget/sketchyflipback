@@ -161,11 +161,11 @@ async function initializeContract() {
                     let image = 'https://via.placeholder.com/80';
                     try {
                         let uri = await pollingNftContract.tokenURI(game.tokenId1);
-                        if (uri.startsWith('ipfs://')) uri = 'https://gateway.pinata.cloud/ipfs/' + uri.slice(7);
+                        if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
                         const response = await fetch(uri);
                         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                         const metadata = await response.json();
-                        image = metadata.image.startsWith('ipfs://') ? 'https://gateway.pinata.cloud/ipfs/' + metadata.image.slice(7) : metadata.image;
+                        image = metadata.image.startsWith('ipfs://') ? 'https://ipfs.io/ipfs/' + metadata.image.slice(7) : metadata.image;
                     } catch (error) {
                         console.error(`Error fetching metadata for token ${game.tokenId1}:`, error);
                     }
@@ -271,13 +271,13 @@ async function initializeContract() {
         try {
             let uri = await nftContract.tokenURI(tokenId);
             console.log(`Fetching metadata for token ${tokenId}: ${uri}`);
-            if (uri.startsWith('ipfs://')) uri = 'https://gateway.pinata.cloud/ipfs/' + uri.slice(7);
+            if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
             const response = await fetch(uri);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const metadata = await response.json();
             let image = metadata.image;
             console.log(`Image URL for token ${tokenId}: ${image}`);
-            if (image && image.startsWith('ipfs://')) image = 'https://gateway.pinata.cloud/ipfs/' + image.slice(7);
+            if (image && image.startsWith('ipfs://')) image = 'https://ipfs.io/ipfs/' + image.slice(7);
             return image || 'https://via.placeholder.com/64';
         } catch (error) {
             console.error(`Error fetching image for token ${tokenId}:`, error.message);
@@ -439,7 +439,7 @@ async function initializeContract() {
     setInterval(async () => {
         console.log('Periodic fetch of open games');
         await fetchOpenGames();
-    }, 600000);
+    }, 10000);
 
     // Socket.IO event listeners
     io.on('connection', (socket) => {
