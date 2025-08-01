@@ -189,11 +189,11 @@ async function initializeContract() {
                     let image = 'https://via.placeholder.com/80';
                     try {
                         let uri = await pollingNftContract.tokenURI(game.tokenId1);
-                        if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
+                        if (uri.startsWith('ipfs://')) uri = 'https://gateway.pinata.cloud/ipfs/' + uri.slice(7);
                         const response = await fetch(uri);
                         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                         const metadata = await response.json();
-                        image = metadata.image.startsWith('ipfs://') ? 'https://ipfs.io/ipfs/' + metadata.image.slice(7) : metadata.image;
+                        image = metadata.image.startsWith('ipfs://') ? 'https://gateway.pinata.cloud/ipfs/' + metadata.image.slice(7) : metadata.image;
                     } catch (error) {
                         console.error(`Error fetching metadata for token ${game.tokenId1}:`, error);
                     }
@@ -272,7 +272,9 @@ async function initializeContract() {
                             viewed: {
                                 [game.player1.toLowerCase()]: false,
                                 [game.player2 ? game.player2.toLowerCase() : '']: false
-                            }
+                            },
+                            createTimestamp: game.createTimestamp.toString(),
+                            joinTimestamp: game.joinTimestamp.toString()
                         });
                     }
                 } catch (e) {
@@ -302,13 +304,13 @@ async function initializeContract() {
         try {
             let uri = await nftContract.tokenURI(tokenId);
             console.log(`Fetching metadata for token ${tokenId}: ${uri}`);
-            if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
+            if (uri.startsWith('ipfs://')) uri = 'https://gateway.pinata.cloud/ipfs/' + uri.slice(7);
             const response = await fetch(uri);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const metadata = await response.json();
             let image = metadata.image;
             console.log(`Image URL for token ${tokenId}: ${image}`);
-            if (image && image.startsWith('ipfs://')) image = 'https://ipfs.io/ipfs/' + image.slice(7);
+            if (image && image.startsWith('ipfs://')) image = 'https://gateway.pinata.cloud/ipfs/' + image.slice(7);
             return image || 'https://via.placeholder.com/64';
         } catch (error) {
             console.error(`Error fetching image for token ${tokenId}:`, error.message);
@@ -376,7 +378,7 @@ async function initializeContract() {
             tokenId1: game.tokenId1.toString(),
             image1,
             player2: player2.toLowerCase(),
-            tokenId2: tokenId2.toString(),
+            tokenId2: game.tokenId2.toString(),
             image2,
             joinTimestamp: game.joinTimestamp.toString(),
             resolved: false,
@@ -387,7 +389,8 @@ async function initializeContract() {
             viewed: {
                 [game.player1.toLowerCase()]: false,
                 [player2.toLowerCase()]: false
-            }
+            },
+            createTimestamp: game.createTimestamp.toString()
         };
         resolvedGames.push(gameData);
         saveResolvedGamesToDisk();
@@ -531,7 +534,8 @@ async function initializeContract() {
             if (!resolvedGame) {
                 // Fallback: check contract
                 try {
-                    const game = await contract.getGame(gameId);
+                    const gameIdNum = Number(gameId);  // Convert to number for hexValue
+                    const game = await contract.getGame(gameIdNum);
                     if (game.player1.toLowerCase() === accountLower || 
                         (game.player2 && game.player2.toLowerCase() === accountLower)) {
                         if (game.player2 === ethers.constants.AddressZero) {
@@ -544,7 +548,7 @@ async function initializeContract() {
                             address: gameAddress,
                             topics: [
                                 topic,
-                                ethers.utils.hexZeroPad(ethers.utils.hexValue(gameId), 32)
+                                ethers.utils.hexZeroPad(ethers.utils.hexValue(gameIdNum), 32)
                             ]
                         };
                         const logs = await provider.getLogs(filter);
@@ -576,7 +580,9 @@ async function initializeContract() {
                             viewed: {
                                 [game.player1.toLowerCase()]: false,
                                 [game.player2 ? game.player2.toLowerCase() : '']: false
-                            }
+                            },
+                            createTimestamp: game.createTimestamp.toString(),
+                            joinTimestamp: game.joinTimestamp.toString()
                         };
                         resolvedGames.push(resolvedGame);
                         saveResolvedGamesToDisk();
@@ -590,7 +596,7 @@ async function initializeContract() {
                     return;
                 }
             }
-            resolvedGame.userResolved[accountLower] = true;
+            // Mark as viewed for this user, but keep userResolved flag for historical tracking
             resolvedGame.viewed[accountLower] = true;
             saveResolvedGamesToDisk();
             if (!resolvedGamesByUser[accountLower]) resolvedGamesByUser[accountLower] = [];
@@ -599,7 +605,7 @@ async function initializeContract() {
                 saveResolvedGamesByUser(resolvedGamesByUser);
             }
             if (resolvedGame.resolved && resolvedGame.winner) {
-                // Emit ONLY to the resolving socket
+                // Emit to the resolving socket, allowing repeated animations
                 socket.emit('gameResolution', {
                     gameId,
                     winner: resolvedGame.winner,
@@ -607,15 +613,10 @@ async function initializeContract() {
                     tokenId2: resolvedGame.tokenId2,
                     image1: resolvedGame.image1,
                     image2: resolvedGame.image2,
-                    resolved: true
+                    resolved: true,
+                    createTimestamp: resolvedGame.createTimestamp,
+                    joinTimestamp: resolvedGame.joinTimestamp
                 });
-                // Check if all players have resolved
-                const allResolved = Object.values(resolvedGame.userResolved).every(v => v);
-                if (allResolved) {
-                    // Remove the game for all users
-                    resolvedGames = resolvedGames.filter(g => g.gameId !== gameId);
-                    saveResolvedGamesToDisk();
-                }
                 const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
                 const userGames = resolvedGames.filter(game => 
                     (game.player1 === accountLower || 
