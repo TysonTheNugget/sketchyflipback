@@ -25,7 +25,6 @@ const gameABI = [
     "function getOpenGames() view returns (uint256[])",
     "function getGame(uint256 gameId) view returns (tuple(address player1, uint256 tokenId1, address player2, uint256 tokenId2, bool active, uint256 requestId, bytes data, uint256 joinTimestamp, uint256 createTimestamp))"
 ];
-
 const nftABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 const daycareAddress = '0xd32247484111569930a0b9c7e669e8E108392496';
 const daycareABI = [{"inputs":[{"internalType":"address","name":"_nftAddress","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"inputs":[],"name":"ReentrancyGuardReentrantCall","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"Claimed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"tokenId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"startTime","type":"uint256"}],"name":"DroppedOff","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"PickedUp","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"PointsAdded","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"PointsBurned","type":"event"},{"anonymous":false,"inputs":[],"name":"PointsEditingLocked","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"}],"name":"UserAdded","type":"event"},{"inputs":[{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"addPoints","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address[]","name":"users","type":"address[]"},{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"name":"addPointsBatch","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"burnPoints","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256[]","name":"daycareIndices","type":"uint256[]"}],"name":"claimMultiple","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"daycareIndex","type":"uint256"}],"name":"claimPoints","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"daycares","outputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"uint256","name":"startTime","type":"uint256"},{"internalType":"uint256","name":"claimedPoints","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"dropOff","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256[]","name":"tokenIds","type":"uint256[]"}],"name":"dropOffMultiple","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getDaycares","outputs":[{"components":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"uint256","name":"startTime","type":"uint256"},{"internalType":"uint256","name":"claimedPoints","type":"uint256"}],"internalType":"struct MymilioDaycare.DaycareInfo[]","name":"","type":"tuple[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"daycareIndex","type":"uint256"}],"name":"getPendingPoints","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getTotalPoints","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lockPointsEditing","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"nft","outputs":[{"internalType":"contract IERC721","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"daycareIndex","type":"uint256"}],"name":"pickUp","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256[]","name":"daycareIndices","type":"uint256[]"}],"name":"pickUpMultiple","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"points","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"pointsEditingLocked","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"pointsPerDay","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"userAddresses","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}];
@@ -135,6 +134,7 @@ async function setupProvider() {
 async function initializeContract() {
     const provider = await setupProvider();
     if (!provider) return;
+
     const contract = new ethers.Contract(gameAddress, gameABI, provider);
     const nftContract = new ethers.Contract(nftAddress, nftABI, provider);
     const daycareContract = new ethers.Contract(daycareAddress, daycareABI, provider);
@@ -420,140 +420,124 @@ async function initializeContract() {
     // Socket.IO event listeners
     io.on('connection', (socket) => {
         console.log('Client connected:', socket.id);
-
         socket.on('registerAddress', ({ address }) => {
             console.log(`Registering address ${address} with socket ${socket.id}`);
             userSessions.set(address.toLowerCase(), socket.id);
             socket.emit('openGamesUpdate', openGames);
         });
-
         socket.emit('openGamesUpdate', openGames);
         setTimeout(() => {
             socket.emit('openGamesUpdate', openGames);
         }, 3000);
-
         socket.on('fetchResolvedGames', async ({ account }) => {
             const accountLower = account.toLowerCase();
             console.log('Fetching resolved games for account:', accountLower);
             const userGames = await fetchResolvedGamesForAccount(accountLower);
             socket.emit('resolvedGames', userGames);
         });
-
         socket.on('fetchUserDaycare', async ({ account }) => {
             const accountLower = account.toLowerCase();
             console.log('Fetching user daycare for account:', accountLower);
             const userData = await fetchUserDaycare(accountLower);
             socket.emit('userDaycareUpdate', userData);
         });
-
         socket.on('resolveGame', async ({ gameId, account }) => {
-            try {
-                if (!account) {
-                    console.warn('Resolve event received without account');
-                    socket.emit('gameResolution', { gameId, error: 'Account missing or already resolved' });
-                    return;
-                }
-                const accountLower = account.toLowerCase();
-                console.log('Resolving game:', gameId, 'for account:', accountLower);
-                let resolvedGame = resolvedGames.find(g => g.gameId === gameId);
-                if (!resolvedGame) {
-                    try {
-                        const gameIdNum = Number(gameId);
-                        const game = await contract.getGame(gameIdNum);
-                        if (game.player1.toLowerCase() === accountLower ||
-                            (game.player2 && game.player2.toLowerCase() === accountLower)) {
-                            if (game.player2 === ethers.constants.AddressZero) {
-                                socket.emit('gameResolution', { gameId, error: 'Game not joined' });
-                                return;
-                            }
-                            const topic = ethers.utils.id('GameResolved(uint256,address,uint256,uint256)');
-                            const filter = {
-                                address: gameAddress,
-                                topics: [
-                                    topic,
-                                    ethers.utils.hexZeroPad(ethers.utils.hexValue(gameIdNum), 32)
-                                ]
-                            };
-                            const logs = await provider.getLogs(filter);
-                            let winner = null;
-                            if (logs.length > 0) {
-                                const log = logs[0];
-                                const event = contract.interface.parseLog(log);
-                                winner = event.args.winner.toLowerCase();
-                            } else {
-                                socket.emit('gameResolution', { gameId, error: 'Game not resolved or canceled' });
-                                return;
-                            }
-                            const image1 = await getNFTImage(game.tokenId1);
-                            const image2 = await getNFTImage(game.tokenId2);
-                            resolvedGame = {
-                                gameId: gameId.toString(),
-                                player1: game.player1.toLowerCase(),
-                                tokenId1: game.tokenId1.toString(),
-                                image1,
-                                player2: game.player2 ? game.player2.toLowerCase() : null,
-                                tokenId2: game.tokenId2.toString(),
-                                image2,
-                                resolved: !game.active,
-                                winner,
-                                userResolved: {
-                                    [game.player1.toLowerCase()]: false,
-                                    [game.player2 ? game.player2.toLowerCase() : '']: false
-                                },
-                                viewed: {
-                                    [game.player1.toLowerCase()]: false,
-                                    [game.player2 ? game.player2.toLowerCase() : '']: false
-                                },
-                                createTimestamp: game.createTimestamp.toString(),
-                                joinTimestamp: game.joinTimestamp.toString()
-                            };
-                            resolvedGames.push(resolvedGame);
-                            saveResolvedGamesToDisk();
-                        } else {
-                            socket.emit('gameResolution', { gameId, error: 'Game not found or user not a player' });
+            const accountLower = account.toLowerCase();
+            console.log('Resolving game:', gameId, 'for account:', accountLower);
+            let resolvedGame = resolvedGames.find(g => g.gameId === gameId);
+            if (!resolvedGame) {
+                try {
+                    const gameIdNum = Number(gameId);
+                    const game = await contract.getGame(gameIdNum);
+                    if (game.player1.toLowerCase() === accountLower ||
+                        (game.player2 && game.player2.toLowerCase() === accountLower)) {
+                        if (game.player2 === ethers.constants.AddressZero) {
+                            socket.emit('gameResolution', { gameId, error: 'Game not joined' });
                             return;
                         }
-                    } catch (error) {
-                        console.error(`Error fetching game ${gameId} from contract:`, error);
-                        socket.emit('gameResolution', { gameId, error: 'Game not found' });
+                        const topic = ethers.utils.id('GameResolved(uint256,address,uint256,uint256)');
+                        const filter = {
+                            address: gameAddress,
+                            topics: [
+                                topic,
+                                ethers.utils.hexZeroPad(ethers.utils.hexValue(gameIdNum), 32)
+                            ]
+                        };
+                        const logs = await provider.getLogs(filter);
+                        let winner = null;
+                        if (logs.length > 0) {
+                            const log = logs[0];
+                            const event = contract.interface.parseLog(log);
+                            winner = event.args.winner.toLowerCase();
+                        } else {
+                            socket.emit('gameResolution', { gameId, error: 'Game not resolved or canceled' });
+                            return;
+                        }
+                        const image1 = await getNFTImage(game.tokenId1);
+                        const image2 = await getNFTImage(game.tokenId2);
+                        resolvedGame = {
+                            gameId: gameId.toString(),
+                            player1: game.player1.toLowerCase(),
+                            tokenId1: game.tokenId1.toString(),
+                            image1,
+                            player2: game.player2 ? game.player2.toLowerCase() : null,
+                            tokenId2: game.tokenId2.toString(),
+                            image2,
+                            resolved: !game.active,
+                            winner,
+                            userResolved: {
+                                [game.player1.toLowerCase()]: false,
+                                [game.player2 ? game.player2.toLowerCase() : '']: false
+                            },
+                            viewed: {
+                                [game.player1.toLowerCase()]: false,
+                                [game.player2 ? game.player2.toLowerCase() : '']: false
+                            },
+                            createTimestamp: game.createTimestamp.toString(),
+                            joinTimestamp: game.joinTimestamp.toString()
+                        };
+                        resolvedGames.push(resolvedGame);
+                        saveResolvedGamesToDisk();
+                    } else {
+                        socket.emit('gameResolution', { gameId, error: 'Game not found or user not a player' });
                         return;
                     }
+                } catch (error) {
+                    console.error(`Error fetching game ${gameId} from contract:`, error);
+                    socket.emit('gameResolution', { gameId, error: 'Game not found' });
+                    return;
                 }
-                resolvedGame.viewed[accountLower] = true;
-                saveResolvedGamesToDisk();
-                if (!resolvedGamesByUser[accountLower]) resolvedGamesByUser[accountLower] = [];
-                if (!resolvedGamesByUser[accountLower].includes(gameId)) {
-                    resolvedGamesByUser[accountLower].push(gameId);
-                    saveResolvedGamesByUser(resolvedGamesByUser);
-                }
-                if (resolvedGame.resolved && resolvedGame.winner) {
-                    socket.emit('gameResolution', {
-                        gameId,
-                        winner: resolvedGame.winner,
-                        tokenId1: resolvedGame.tokenId1,
-                        tokenId2: resolvedGame.tokenId2,
-                        image1: resolvedGame.image1,
-                        image2: resolvedGame.image2,
-                        resolved: true,
-                        createTimestamp: resolvedGame.createTimestamp,
-                        joinTimestamp: resolvedGame.joinTimestamp
-                    });
-                    const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
-                    const userGames = resolvedGames.filter(game =>
-                        (game.player1 === accountLower ||
-                        (game.player2 && game.player2 === accountLower)) &&
-                        !userResolvedGames.has(game.gameId)
-                    );
-                    socket.emit('resolvedGames', userGames);
-                } else {
-                    socket.emit('gameResolution', { gameId, error: 'Game not resolved or no winner' });
-                }
-            } catch (error) {
-                console.error('Error in resolveGame handler:', error);
-                socket.emit('gameResolution', { gameId, error: 'Server error during resolve' });
+            }
+            resolvedGame.viewed[accountLower] = true;
+            saveResolvedGamesToDisk();
+            if (!resolvedGamesByUser[accountLower]) resolvedGamesByUser[accountLower] = [];
+            if (!resolvedGamesByUser[accountLower].includes(gameId)) {
+                resolvedGamesByUser[accountLower].push(gameId);
+                saveResolvedGamesByUser(resolvedGamesByUser);
+            }
+            if (resolvedGame.resolved && resolvedGame.winner) {
+                socket.emit('gameResolution', {
+                    gameId,
+                    winner: resolvedGame.winner,
+                    tokenId1: resolvedGame.tokenId1,
+                    tokenId2: resolvedGame.tokenId2,
+                    image1: resolvedGame.image1,
+                    image2: resolvedGame.image2,
+                    resolved: true,
+                    createTimestamp: resolvedGame.createTimestamp,
+                    joinTimestamp: resolvedGame.joinTimestamp
+                });
+                const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
+                const userGames = resolvedGames.filter(game =>
+                    (game.player1 === accountLower ||
+                    (game.player2 && game.player2 === accountLower)) &&
+                    !userResolvedGames.has(game.gameId)
+                );
+                socket.emit('resolvedGames', userGames);
+            } else {
+                socket.emit('gameResolution', { gameId, error: 'Game not resolved or no winner' });
             }
         });
-
         socket.on('markGameResolved', ({ gameId, account }) => {
             const accountLower = account.toLowerCase();
             console.log('Marking game resolved for game:', gameId, 'account:', accountLower);
@@ -578,7 +562,6 @@ async function initializeContract() {
             );
             socket.emit('resolvedGames', userGames);
         });
-
         socket.on('removeGame', ({ gameId, account }) => {
             const accountLower = account.toLowerCase();
             console.log('Removing game:', gameId, 'for account:', accountLower);
@@ -597,7 +580,6 @@ async function initializeContract() {
             );
             socket.emit('resolvedGames', userGames);
         });
-
         socket.on('markGamesViewed', ({ account, gameIds }) => {
             const accountLower = account.toLowerCase();
             console.log('Marking games viewed for account:', accountLower, 'gameIds:', gameIds);
@@ -623,7 +605,6 @@ async function initializeContract() {
             );
             socket.emit('resolvedGames', userGames);
         });
-
         socket.on('disconnect', () => {
             console.log('Client disconnected:', socket.id);
             for (let [address, socketId] of userSessions.entries()) {
