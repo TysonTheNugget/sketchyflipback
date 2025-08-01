@@ -177,6 +177,20 @@ async function initializeContract() {
     loadResolvedGamesFromDisk();
     loadLeaderboardFromDisk();
 
+    // Helper function for fetching with retries
+    async function fetchWithRetry(url, maxRetries = 3) {
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return response;
+            } catch (error) {
+                if (i === maxRetries - 1) throw error;
+                await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+            }
+        }
+    }
+
     // Fetch open games
     async function fetchOpenGames() {
         try {
@@ -189,8 +203,14 @@ async function initializeContract() {
                     let image = 'https://via.placeholder.com/80';
                     try {
                         let uri = await pollingNftContract.tokenURI(game.tokenId1);
+                        console.log(`Fetching metadata for token ${game.tokenId1}: ${uri}`);
                         if (uri.startsWith('ipfs://')) uri = 'https://gateway.pinata.cloud/ipfs/' + uri.slice(7);
-                        const response = await fetch(uri);
+                        let response = await fetchWithRetry(uri);
+                        if (!response.ok) {
+                            console.log(`Pinata failed for token ${game.tokenId1}, trying Cloudflare`);
+                            uri = uri.replace('gateway.pinata.cloud', 'cloudflare-ipfs.com');
+                            response = await fetchWithRetry(uri);
+                        }
                         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                         const metadata = await response.json();
                         image = metadata.image.startsWith('ipfs://') ? 'https://gateway.pinata.cloud/ipfs/' + metadata.image.slice(7) : metadata.image;
@@ -299,13 +319,18 @@ async function initializeContract() {
         }
     }
 
-    // Fetch NFT image
+    // Fetch NFT image with retries and fallback
     async function getNFTImage(tokenId) {
         try {
             let uri = await nftContract.tokenURI(tokenId);
             console.log(`Fetching metadata for token ${tokenId}: ${uri}`);
             if (uri.startsWith('ipfs://')) uri = 'https://gateway.pinata.cloud/ipfs/' + uri.slice(7);
-            const response = await fetch(uri);
+            let response = await fetchWithRetry(uri);
+            if (!response.ok) {
+                console.log(`Pinata failed for token ${tokenId}, trying Cloudflare`);
+                uri = uri.replace('gateway.pinata.cloud', 'cloudflare-ipfs.com');
+                response = await fetchWithRetry(uri);
+            }
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const metadata = await response.json();
             let image = metadata.image;
@@ -347,7 +372,7 @@ async function initializeContract() {
                     tokenId: d.tokenId.toString(),
                     startTime: d.startTime.toString(),
                     claimedPoints: d.claimedPoints.toString(),
-                    pending: pending.toString(),
+                    pending: d.toString(),
                     image
                 };
             }));
@@ -432,7 +457,7 @@ async function initializeContract() {
     });
 
     // Event listeners for daycare
-    daycareContract.on('Claimed', async (user, amount) => {
+    contract.on('Claimed', async (user, amount) => {
         console.log('Claimed:', user.toLowerCase(), 'Amount:', amount.toString());
         await fetchLeaderboard();
         const userLower = user.toLowerCase();
@@ -443,7 +468,7 @@ async function initializeContract() {
         }
     });
 
-    daycareContract.on('PointsAdded', async (user, amount) => {
+    contract.on('PointsAdded', async (user, amount) => {
         console.log('PointsAdded:', user.toLowerCase(), 'Amount:', amount.toString());
         await fetchLeaderboard();
         const userLower = user.toLowerCase();
@@ -454,7 +479,7 @@ async function initializeContract() {
         }
     });
 
-    daycareContract.on('PointsBurned', async (user, amount) => {
+    contract.on('PointsBurned', async (user, amount) => {
         console.log('PointsBurned:', user.toLowerCase(), 'Amount:', amount.toString());
         await fetchLeaderboard();
         const userLower = user.toLowerCase();
@@ -465,7 +490,7 @@ async function initializeContract() {
         }
     });
 
-    daycareContract.on('DroppedOff', async (user, tokenId, startTime) => {
+    contract.on('DroppedOff', async (user, tokenId, startTime) => {
         console.log('DroppedOff:', user.toLowerCase(), 'Token:', tokenId.toString());
         const userLower = user.toLowerCase();
         const socketId = userSessions.get(userLower);
@@ -475,7 +500,7 @@ async function initializeContract() {
         }
     });
 
-    daycareContract.on('PickedUp', async (user, tokenId) => {
+    contract.on('PickedUp', async (user, tokenId) => {
         console.log('PickedUp:', user.toLowerCase(), 'Token:', tokenId.toString());
         const userLower = user.toLowerCase();
         const socketId = userSessions.get(userLower);
@@ -575,11 +600,11 @@ async function initializeContract() {
                             winner,
                             userResolved: {
                                 [game.player1.toLowerCase()]: false,
-                                [game.player2 ? game.player2.toLowerCase() : '']: false
+                                [game.player2 ? game.player2.toLowerCase()]: false
                             },
                             viewed: {
                                 [game.player1.toLowerCase()]: false,
-                                [game.player2 ? game.player2.toLowerCase() : '']: false
+                                [game.player2 ? game.player2.toLowerCase()]: false
                             },
                             createTimestamp: game.createTimestamp.toString(),
                             joinTimestamp: game.joinTimestamp.toString()
