@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const cors = require('cors');
 const { Server } = require('socket.io');
 const ethers = require('ethers');
 const fs = require('fs');
@@ -7,6 +8,13 @@ const path = require('path');
 require('dotenv').config();
 
 const app = express();
+
+// CORS for HTTP and Socket.io handshake
+app.use(cors({
+    origin: ['https://sketchyflips.vercel.app', 'http://localhost:3000'],
+    credentials: true
+}));
+
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
@@ -15,7 +23,7 @@ const io = new Server(server, {
     }
 });
 
-// -------- CONTRACT ADDRESSES/ABIs --------
+// ---- CONTRACT ADDRESSES/ABIs ----
 const gameAddress = '0xf6b8d2E0d36669Ed82059713BDc6ACfABe11Fde6';
 const nftAddress = '0x08533a2b16e3db03eebd5b23210122f97dfcb97d';
 
@@ -27,110 +35,94 @@ const gameABI = [
     "function getOpenGames() view returns (uint256[])",
     "function getGame(uint256 gameId) view returns (tuple(address player1, uint256 tokenId1, address player2, uint256 tokenId2, bool active, uint256 requestId, bytes data, uint256 joinTimestamp, uint256 createTimestamp))"
 ];
-
 const nftABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 
+// --- PASTE YOUR FULL DAYCARE ABI BELOW ---
 const daycareAddress = '0xd32247484111569930a0b9c7e669e8E108392496';
 const daycareABI = [{"inputs":[{"internalType":"address","name":"_nftAddress","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"inputs":[],"name":"ReentrancyGuardReentrantCall","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"Claimed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"tokenId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"startTime","type":"uint256"}],"name":"DroppedOff","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"PickedUp","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"PointsAdded","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"PointsBurned","type":"event"},{"anonymous":false,"inputs":[],"name":"PointsEditingLocked","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"}],"name":"UserAdded","type":"event"},{"inputs":[{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"addPoints","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address[]","name":"users","type":"address[]"},{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"name":"addPointsBatch","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"burnPoints","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256[]","name":"daycareIndices","type":"uint256[]"}],"name":"claimMultiple","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"daycareIndex","type":"uint256"}],"name":"claimPoints","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"daycares","outputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"uint256","name":"startTime","type":"uint256"},{"internalType":"uint256","name":"claimedPoints","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"dropOff","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256[]","name":"tokenIds","type":"uint256[]"}],"name":"dropOffMultiple","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getDaycares","outputs":[{"components":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"uint256","name":"startTime","type":"uint256"},{"internalType":"uint256","name":"claimedPoints","type":"uint256"}],"internalType":"struct MymilioDaycare.DaycareInfo[]","name":"","type":"tuple[]"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getLeaderboard","outputs":[{"internalType":"address[]","name":"","type":"address[]"},{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"daycareIndex","type":"uint256"}],"name":"getPendingPoints","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getTotalPoints","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lockPointsEditing","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"nft","outputs":[{"internalType":"contract IERC721","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"daycareIndex","type":"uint256"}],"name":"pickUp","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256[]","name":"daycareIndices","type":"uint256[]"}],"name":"pickUpMultiple","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"points","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"pointsEditingLocked","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"pointsPerDay","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"userAddresses","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}];
+    /* PASTE FULL ABI HERE */
+];
 
-// -------- DATA PERSISTENCE --------
+// ---- DATA STORAGE & HELPERS ----
 let openGames = [];
 let resolvedGames = [];
 let userSessions = new Map();
+
 const dataDir = '/var/data';
 const gamesFile = path.join(dataDir, 'games.json');
 const resolvedGamesFile = path.join(dataDir, 'resolved_games.json');
 const resolvedGamesByUserFile = path.join(dataDir, 'resolved_games_by_user.json');
-
 let leaderboard = [];
 const leaderboardFile = path.join(dataDir, 'leaderboard.json');
 
-// Ensure the data folder exists
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-}
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
-// -- LOAD/SAVE HELPERS --
 function loadGamesFromDisk() {
     if (fs.existsSync(gamesFile)) {
-        try {
-            openGames = JSON.parse(fs.readFileSync(gamesFile));
-            console.log('✅ Loaded open games from disk');
-        } catch (e) {
-            console.error('❌ Error loading open games from disk:', e);
-        }
+        try { openGames = JSON.parse(fs.readFileSync(gamesFile)); }
+        catch (e) { console.error('❌ Error loading open games:', e); }
     }
 }
-
 function saveGamesToDisk() {
-    try {
-        fs.writeFileSync(gamesFile, JSON.stringify(openGames, null, 2));
-        console.log('✅ Saved open games to disk');
-    } catch (e) {
-        console.error('❌ Error saving open games to disk:', e);
-    }
+    try { fs.writeFileSync(gamesFile, JSON.stringify(openGames, null, 2)); }
+    catch (e) { console.error('❌ Error saving open games:', e); }
 }
-
 function loadResolvedGamesFromDisk() {
     if (fs.existsSync(resolvedGamesFile)) {
-        try {
-            resolvedGames = JSON.parse(fs.readFileSync(resolvedGamesFile));
-            console.log('✅ Loaded resolved games from disk');
-        } catch (e) {
-            console.error('❌ Error loading resolved games from disk:', e);
-        }
+        try { resolvedGames = JSON.parse(fs.readFileSync(resolvedGamesFile)); }
+        catch (e) { console.error('❌ Error loading resolved games:', e); }
     }
 }
-
 function saveResolvedGamesToDisk() {
-    try {
-        fs.writeFileSync(resolvedGamesFile, JSON.stringify(resolvedGames, null, 2));
-        console.log('✅ Saved resolved games to disk');
-    } catch (e) {
-        console.error('❌ Error saving resolved games to disk:', e);
-    }
+    try { fs.writeFileSync(resolvedGamesFile, JSON.stringify(resolvedGames, null, 2)); }
+    catch (e) { console.error('❌ Error saving resolved games:', e); }
 }
-
 function loadResolvedGamesByUser() {
     if (!fs.existsSync(resolvedGamesByUserFile)) return {};
-    try {
-        return JSON.parse(fs.readFileSync(resolvedGamesByUserFile));
-    } catch (e) {
-        console.error('❌ Error loading resolved games by user from disk:', e);
-        return {};
-    }
+    try { return JSON.parse(fs.readFileSync(resolvedGamesByUserFile)); }
+    catch (e) { console.error('❌ Error loading resolvedGamesByUser:', e); return {}; }
 }
-
 function saveResolvedGamesByUser(data) {
-    try {
-        fs.writeFileSync(resolvedGamesByUserFile, JSON.stringify(data, null, 2));
-        console.log('✅ Saved resolved games by user to disk');
-    } catch (e) {
-        console.error('❌ Error saving resolved games by user to disk:', e);
-    }
+    try { fs.writeFileSync(resolvedGamesByUserFile, JSON.stringify(data, null, 2)); }
+    catch (e) { console.error('❌ Error saving resolvedGamesByUser:', e); }
 }
-
 function loadLeaderboardFromDisk() {
     if (fs.existsSync(leaderboardFile)) {
-        try {
-            leaderboard = JSON.parse(fs.readFileSync(leaderboardFile));
-            console.log('✅ Loaded leaderboard from disk');
-        } catch (e) {
-            console.error('❌ Error loading leaderboard from disk:', e);
-        }
+        try { leaderboard = JSON.parse(fs.readFileSync(leaderboardFile)); }
+        catch (e) { console.error('❌ Error loading leaderboard:', e); }
     }
 }
-
 function saveLeaderboardToDisk() {
-    try {
-        fs.writeFileSync(leaderboardFile, JSON.stringify(leaderboard, null, 2));
-        console.log('✅ Saved leaderboard to disk');
-    } catch (e) {
-        console.error('❌ Error saving leaderboard to disk:', e);
+    try { fs.writeFileSync(leaderboardFile, JSON.stringify(leaderboard, null, 2)); }
+    catch (e) { console.error('❌ Error saving leaderboard:', e); }
+}
+let resolvedGamesByUser = loadResolvedGamesByUser();
+
+function removeOpenGame(gameId) {
+    const before = openGames.length;
+    openGames = openGames.filter(g => g.id !== gameId && g.gameId !== gameId);
+    if (before !== openGames.length) {
+        saveGamesToDisk();
+        io.emit('openGamesUpdate', openGames);
     }
 }
 
-// -------- PROVIDER SETUP --------
+async function getNFTImage(tokenId, nftContract) {
+    try {
+        let uri = await nftContract.tokenURI(tokenId);
+        if (uri.startsWith('ipfs://')) uri = 'https://gateway.pinata.cloud/ipfs/' + uri.slice(7);
+        const response = await fetch(uri);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const metadata = await response.json();
+        let image = metadata.image;
+        if (image && image.startsWith('ipfs://')) image = 'https://gateway.pinata.cloud/ipfs/' + image.slice(7);
+        return image || 'https://via.placeholder.com/64';
+    } catch (error) {
+        console.error(`Error fetching image for token ${tokenId}:`, error.message);
+        return 'https://via.placeholder.com/64';
+    }
+}
+
 async function setupProvider() {
     let provider;
     try {
@@ -151,34 +143,32 @@ async function setupProvider() {
     return provider;
 }
 
-// -------- OPEN/RESOLVED GAME HELPERS --------
-function removeOpenGame(gameId) {
-    const before = openGames.length;
-    openGames = openGames.filter(g => g.id !== gameId && g.gameId !== gameId);
-    if (before !== openGames.length) {
-        saveGamesToDisk();
-        io.emit('openGamesUpdate', openGames);
-    }
-}
-
-// NFT image helper
-async function getNFTImage(tokenId, nftContract) {
+async function fetchUserDaycare(account, daycareContract, nftContract) {
+    const accountLower = account.toLowerCase();
     try {
-        let uri = await nftContract.tokenURI(tokenId);
-        if (uri.startsWith('ipfs://')) uri = 'https://gateway.pinata.cloud/ipfs/' + uri.slice(7);
-        const response = await fetch(uri);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const metadata = await response.json();
-        let image = metadata.image;
-        if (image && image.startsWith('ipfs://')) image = 'https://gateway.pinata.cloud/ipfs/' + image.slice(7);
-        return image || 'https://via.placeholder.com/64';
+        const points = await daycareContract.getTotalPoints(account);
+        const daycares = await daycareContract.getDaycares(account);
+        const enhancedDaycares = await Promise.all(daycares.map(async (d, index) => {
+            const pending = await daycareContract.getPendingPoints(account, index);
+            const image = await getNFTImage(d.tokenId, nftContract);
+            return {
+                tokenId: d.tokenId.toString(),
+                startTime: d.startTime.toString(),
+                claimedPoints: d.claimedPoints.toString(),
+                pending: pending.toString(),
+                image
+            };
+        }));
+        return {
+            points: points.toString(),
+            daycares: enhancedDaycares
+        };
     } catch (error) {
-        console.error(`Error fetching image for token ${tokenId}:`, error.message);
-        return 'https://via.placeholder.com/64';
+        console.error(`Error fetching daycare for ${accountLower}:`, error);
+        return { points: '0', daycares: [] };
     }
 }
 
-// -------- CONTRACT INITIALIZATION / EVENT HANDLERS --------
 async function initializeContract() {
     const provider = await setupProvider();
     if (!provider) return;
@@ -186,19 +176,16 @@ async function initializeContract() {
     const nftContract = new ethers.Contract(nftAddress, nftABI, provider);
     const daycareContract = new ethers.Contract(daycareAddress, daycareABI, provider);
 
-    // HTTP fallback for fetches in socket endpoints
     const httpProvider = new ethers.providers.JsonRpcProvider(process.env.ALCHEMY_HTTP_URL);
     const pollingContract = new ethers.Contract(gameAddress, gameABI, httpProvider);
     const pollingNftContract = new ethers.Contract(nftAddress, nftABI, httpProvider);
 
-    // Load persisted data
     loadGamesFromDisk();
     loadResolvedGamesFromDisk();
     loadLeaderboardFromDisk();
 
-    // --- GAME EVENTS (NO POLLING) ---
+    // ---- GAME EVENTS ----
     contract.on('GameCreated', async (gameId, player1, tokenId1) => {
-        console.log('GameCreated:', gameId.toString(), player1);
         let image = await getNFTImage(tokenId1, nftContract);
         const openGame = {
             id: gameId.toString(),
@@ -214,7 +201,6 @@ async function initializeContract() {
     });
 
     contract.on('GameJoined', async (gameId, player2, tokenId2) => {
-        console.log('GameJoined:', gameId.toString(), player2);
         removeOpenGame(gameId.toString());
         const game = await contract.getGame(gameId);
         const image1 = await getNFTImage(game.tokenId1, nftContract);
@@ -241,11 +227,10 @@ async function initializeContract() {
         };
         resolvedGames.push(gameData);
         saveResolvedGamesToDisk();
-        io.emit('openGamesUpdate', openGames); // Not strictly needed here
+        io.emit('openGamesUpdate', openGames);
     });
 
     contract.on('GameResolved', async (gameId, winner, tokenId1, tokenId2) => {
-        console.log('GameResolved:', gameId.toString(), winner.toLowerCase());
         removeOpenGame(gameId.toString());
         const image1 = await getNFTImage(tokenId1, nftContract);
         const image2 = await getNFTImage(tokenId2, nftContract);
@@ -270,64 +255,25 @@ async function initializeContract() {
     });
 
     contract.on('GameCanceled', async (gameId) => {
-        console.log('GameCanceled:', gameId.toString());
         removeOpenGame(gameId.toString());
         resolvedGames = resolvedGames.filter(game => game.gameId !== gameId.toString());
         saveResolvedGamesToDisk();
         io.emit('openGamesUpdate', openGames);
     });
 
-    // --- DAYCARE EVENTS: still event-driven, NO POLLING for leaderboard ---
-    daycareContract.on('Claimed', async (user, amount) => {
-        // Your custom logic, eg. notify a user
-        const userLower = user.toLowerCase();
-        const socketId = userSessions.get(userLower);
-        if (socketId) {
-            const userData = await fetchUserDaycare(userLower, daycareContract, nftContract);
-            io.to(socketId).emit('userDaycareUpdate', userData);
-        }
-    });
-    daycareContract.on('PointsAdded', async (user, amount) => {
-        const userLower = user.toLowerCase();
-        const socketId = userSessions.get(userLower);
-        if (socketId) {
-            const userData = await fetchUserDaycare(userLower, daycareContract, nftContract);
-            io.to(socketId).emit('userDaycareUpdate', userData);
-        }
-    });
-    daycareContract.on('PointsBurned', async (user, amount) => {
-        const userLower = user.toLowerCase();
-        const socketId = userSessions.get(userLower);
-        if (socketId) {
-            const userData = await fetchUserDaycare(userLower, daycareContract, nftContract);
-            io.to(socketId).emit('userDaycareUpdate', userData);
-        }
-    });
-    daycareContract.on('DroppedOff', async (user, tokenId, startTime) => {
-        const userLower = user.toLowerCase();
-        const socketId = userSessions.get(userLower);
-        if (socketId) {
-            const userData = await fetchUserDaycare(userLower, daycareContract, nftContract);
-            io.to(socketId).emit('userDaycareUpdate', userData);
-        }
-    });
-    daycareContract.on('PickedUp', async (user, tokenId) => {
-        const userLower = user.toLowerCase();
-        const socketId = userSessions.get(userLower);
-        if (socketId) {
-            const userData = await fetchUserDaycare(userLower, daycareContract, nftContract);
-            io.to(socketId).emit('userDaycareUpdate', userData);
-        }
-    });
+    // ---- DAYCARE EVENTS (OPTIONAL) ----
+    daycareContract.on('Claimed', async (user, amount) => {});
+    daycareContract.on('PointsAdded', async (user, amount) => {});
+    daycareContract.on('PointsBurned', async (user, amount) => {});
+    daycareContract.on('DroppedOff', async (user, tokenId, startTime) => {});
+    daycareContract.on('PickedUp', async (user, tokenId) => {});
 
-    // --- SOCKET.IO: no changes to client API, but backend only emits open/resolved games on events! ---
+    // ---- SOCKET.IO ----
     io.on('connection', (socket) => {
-        console.log('Client connected:', socket.id);
-
         socket.on('registerAddress', ({ address }) => {
             userSessions.set(address.toLowerCase(), socket.id);
             socket.emit('openGamesUpdate', openGames);
-            socket.emit('leaderboardUpdate', leaderboard); // Optional: can remove if frontend fetches from chain directly
+            socket.emit('leaderboardUpdate', leaderboard);
         });
 
         socket.emit('openGamesUpdate', openGames);
@@ -337,7 +283,7 @@ async function initializeContract() {
             const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
             const userGames = resolvedGames.filter(game =>
                 (game.player1 === accountLower ||
-                 (game.player2 && game.player2 === accountLower)) &&
+                    (game.player2 && game.player2 === accountLower)) &&
                 !userResolvedGames.has(game.gameId)
             );
             socket.emit('resolvedGames', userGames);
@@ -353,17 +299,15 @@ async function initializeContract() {
             const accountLower = account.toLowerCase();
             let resolvedGame = resolvedGames.find(g => g.gameId === gameId);
             if (!resolvedGame) {
-                // Try fetching from blockchain as fallback
                 try {
                     const gameIdNum = Number(gameId);
                     const game = await pollingContract.getGame(gameIdNum);
-                    if (game.player1.toLowerCase() === accountLower || 
+                    if (game.player1.toLowerCase() === accountLower ||
                         (game.player2 && game.player2.toLowerCase() === accountLower)) {
                         if (game.player2 === ethers.constants.AddressZero) {
                             socket.emit('gameResolution', { gameId, error: 'Game not joined' });
                             return;
                         }
-                        // Try to find winner via event logs
                         const topic = ethers.utils.id('GameResolved(uint256,address,uint256,uint256)');
                         const filter = {
                             address: gameAddress,
@@ -417,7 +361,6 @@ async function initializeContract() {
                     return;
                 }
             }
-            // Mark as viewed for this user
             resolvedGame.viewed[accountLower] = true;
             saveResolvedGamesToDisk();
             if (!resolvedGamesByUser[accountLower]) resolvedGamesByUser[accountLower] = [];
@@ -524,33 +467,6 @@ async function initializeContract() {
             }
         });
     });
-}
-
-// --- USER DAYCARE HELPER ---
-async function fetchUserDaycare(account, daycareContract, nftContract) {
-    const accountLower = account.toLowerCase();
-    try {
-        const points = await daycareContract.getTotalPoints(account);
-        const daycares = await daycareContract.getDaycares(account);
-        const enhancedDaycares = await Promise.all(daycares.map(async (d, index) => {
-            const pending = await daycareContract.getPendingPoints(account, index);
-            const image = await getNFTImage(d.tokenId, nftContract);
-            return {
-                tokenId: d.tokenId.toString(),
-                startTime: d.startTime.toString(),
-                claimedPoints: d.claimedPoints.toString(),
-                pending: pending.toString(),
-                image
-            };
-        }));
-        return {
-            points: points.toString(),
-            daycares: enhancedDaycares
-        };
-    } catch (error) {
-        console.error(`Error fetching daycare for ${accountLower}:`, error);
-        return { points: '0', daycares: [] };
-    }
 }
 
 app.get('/', (req, res) => {
