@@ -10,7 +10,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: ['https://sketchyflips.vercel.app', 'http://localhost:3000'],
+        origin: ['https://sketchyflips.vercel.app', 'https://dapps.mymilio.xyz', 'http://localhost:3000'],
         methods: ['GET', 'POST']
     }
 });
