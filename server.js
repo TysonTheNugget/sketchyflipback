@@ -311,19 +311,36 @@ async function initializeContract() {
             image,
             createdAt: new Date(Number(game.createTimestamp) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             createTimestamp: game.createTimestamp.toString()
- land: true,
-            winner,
+        });
+        saveGamesToDisk();
+        io.emit('openGamesUpdate', openGames);
+    });
+
+    contract.on('GameJoined', async (gameId, player2, tokenId2) => {
+        console.log('GameJoined:', gameId.toString(), 'Player:', player2);
+        const game = await contract.getGame(gameId);
+        const image1 = await getNFTImage(game.tokenId1);
+        const image2 = await getNFTImage(tokenId2);
+        const gameData = {
+            gameId: gameId.toString(),
+            player1: game.player1.toLowerCase(),
+            tokenId1: game.tokenId1.toString(),
+            image1,
+            player2: player2.toLowerCase(),
+            tokenId2: game.tokenId2.toString(),
+            image2,
+            joinTimestamp: game.joinTimestamp.toString(),
+            resolved: false,
             userResolved: {
                 [game.player1.toLowerCase()]: false,
-                [game.player2 ? game.player2.toLowerCase() : '']: false
+                [player2.toLowerCase()]: false
             },
             viewed: {
                 [game.player1.toLowerCase()]: false,
-                [game.player2 ? game.player2.toLowerCase() : '']: false
+                [player2.toLowerCase()]: false
             },
-            createTimestamp: game.createTimestamp.toString(),
-            joinTimestamp: game.joinTimestamp.toString()
-        });
+            createTimestamp: game.createTimestamp.toString()
+        };
         resolvedGames.push(gameData);
         saveResolvedGamesToDisk();
         openGames = openGames.filter(g => g.id !== gameId.toString()); // Remove from openGames
@@ -331,6 +348,7 @@ async function initializeContract() {
         const player2Socket = userSessions.get(player2.toLowerCase());
         if (player1Socket) io.to(player1Socket).emit('gameJoined', gameData);
         if (player2Socket) io.to(player2Socket).emit('gameJoined', gameData);
+        io.emit('openGamesUpdate', openGames);
     });
 
     contract.on('GameResolved', async (gameId, winner, tokenId1, tokenId2) => {
@@ -354,6 +372,7 @@ async function initializeContract() {
         openGames = openGames.filter(g => g.id !== gameId.toString()); // Remove from openGames
         saveResolvedGamesToDisk();
         saveGamesToDisk();
+        io.emit('openGamesUpdate', openGames);
     });
 
     contract.on('GameCanceled', async (gameId) => {
@@ -362,6 +381,7 @@ async function initializeContract() {
         openGames = openGames.filter(g => g.id !== gameId.toString()); // Remove from openGames
         saveResolvedGamesToDisk();
         saveGamesToDisk();
+        io.emit('openGamesUpdate', openGames);
     });
 
     // Event listeners for daycare
