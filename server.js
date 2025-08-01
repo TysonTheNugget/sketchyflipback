@@ -144,7 +144,7 @@ async function setupProvider() {
     try {
         provider = new ethers.providers.WebSocketProvider(process.env.ALCHEMY_WSS_URL);
         provider.on('error', (error) => {
-            console.error('WebSocket error:', error);
+            console.error('WebSocket error:', error.message);
             setTimeout(setupProvider, 5000);
         });
         provider.on('close', (code, reason) => {
@@ -166,6 +166,12 @@ async function initializeContract() {
     const nftContract = new ethers.Contract(nftAddress, nftABI, provider);
     const daycareContract = new ethers.Contract(daycareAddress, daycareABI, provider);
 
+    // New: HTTP fallback for polling
+    const httpProvider = new ethers.providers.JsonRpcProvider(process.env.ALCHEMY_HTTP_URL);
+    const pollingContract = new ethers.Contract(gameAddress, gameABI, httpProvider);
+    const pollingNftContract = new ethers.Contract(nftAddress, nftABI, httpProvider);
+    const pollingDaycareContract = new ethers.Contract(daycareAddress, daycareABI, httpProvider);
+
     // Load data from disk on startup
     loadGamesFromDisk();
     loadResolvedGamesFromDisk();
@@ -174,14 +180,15 @@ async function initializeContract() {
     // Fetch open games
     async function fetchOpenGames() {
         try {
-            const openIds = await contract.getOpenGames();
+            const openIds = await pollingContract.getOpenGames();
+            console.log('👉 Fetched openIds:', openIds.map(i => i.toString()));
             openGames = [];
             for (let id of openIds) {
                 try {
-                    const game = await contract.getGame(id);
+                    const game = await pollingContract.getGame(id);
                     let image = 'https://via.placeholder.com/80';
                     try {
-                        let uri = await nftContract.tokenURI(game.tokenId1);
+                        let uri = await pollingNftContract.tokenURI(game.tokenId1);
                         if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
                         const response = await fetch(uri);
                         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -206,7 +213,7 @@ async function initializeContract() {
             io.emit('openGamesUpdate', openGames);
             saveGamesToDisk();
         } catch (error) {
-            console.error('Error fetching open games:', error);
+            console.error('Error in fetchOpenGames (likely provider issue):', error.message);
         }
     }
 
@@ -312,7 +319,7 @@ async function initializeContract() {
     // Fetch leaderboard
     async function fetchLeaderboard() {
         try {
-            const [addresses, points] = await daycareContract.getLeaderboard();
+            const [addresses, points] = await pollingDaycareContract.getLeaderboard();
             leaderboard = addresses.map((addr, i) => ({
                 address: addr.toLowerCase(),
                 points: points[i].toString()
