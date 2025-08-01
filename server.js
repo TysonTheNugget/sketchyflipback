@@ -32,8 +32,7 @@ const daycareABI = [{"inputs":[{"internalType":"address","name":"_nftAddress","t
 // Persistent game storage
 let openGames = [];
 let resolvedGames = [];
-let userSessions = new Map(); // Map<address, socketId>
-
+let userSessions = new Map();
 const dataDir = '/var/data';
 const gamesFile = path.join(dataDir, 'games.json');
 const resolvedGamesFile = path.join(dataDir, 'resolved_games.json');
@@ -134,22 +133,15 @@ async function setupProvider() {
 async function initializeContract() {
     const provider = await setupProvider();
     if (!provider) return;
-
     const contract = new ethers.Contract(gameAddress, gameABI, provider);
-    const nftContract = new ethers.Contract(nftAddress, nftABI, provider);
     const daycareContract = new ethers.Contract(daycareAddress, daycareABI, provider);
-
-    // HTTP fallback for polling
     const httpProvider = new ethers.providers.JsonRpcProvider(process.env.ALCHEMY_HTTP_URL);
     const pollingContract = new ethers.Contract(gameAddress, gameABI, httpProvider);
-    const pollingNftContract = new ethers.Contract(nftAddress, nftABI, httpProvider);
     const pollingDaycareContract = new ethers.Contract(daycareAddress, daycareABI, httpProvider);
 
-    // Load data from disk on startup
     loadGamesFromDisk();
     loadResolvedGamesFromDisk();
 
-    // Fetch open games
     async function fetchOpenGames() {
         try {
             const openIds = await pollingContract.getOpenGames();
@@ -158,22 +150,10 @@ async function initializeContract() {
             for (let id of openIds) {
                 try {
                     const game = await pollingContract.getGame(id);
-                    let image = 'https://via.placeholder.com/80';
-                    try {
-                        let uri = await pollingNftContract.tokenURI(game.tokenId1);
-                        if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
-                        const response = await fetch(uri);
-                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                        const metadata = await response.json();
-                        image = metadata.image.startsWith('ipfs://') ? 'https://ipfs.io/ipfs/' + metadata.image.slice(7) : metadata.image;
-                    } catch (error) {
-                        console.error(`Error fetching metadata for token ${game.tokenId1}:`, error);
-                    }
                     openGames.push({
                         id: id.toString(),
                         player1: game.player1.toLowerCase(),
                         tokenId1: game.tokenId1.toString(),
-                        image,
                         createdAt: new Date(Number(game.createTimestamp) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                         createTimestamp: game.createTimestamp.toString()
                     });
@@ -189,7 +169,6 @@ async function initializeContract() {
         }
     }
 
-    // Fetch resolved games for an account
     async function fetchResolvedGamesForAccount(accountLower) {
         try {
             resolvedGames = resolvedGames.filter(game =>
@@ -202,7 +181,7 @@ async function initializeContract() {
                         (game.player1.toLowerCase() === accountLower ||
                          (game.player2 && game.player2.toLowerCase() === accountLower)) &&
                         !resolvedGames.some(g => g.gameId === i.toString())) {
-                        if (game.player2 === ethers.constants.AddressZero) continue; // Not joined, skip
+                        if (game.player2 === ethers.constants.AddressZero) continue;
                         const topic = ethers.utils.id('GameResolved(uint256,address,uint256,uint256)');
                         const filter = {
                             address: gameAddress,
@@ -220,16 +199,12 @@ async function initializeContract() {
                         } else {
                             continue;
                         }
-                        const image1 = await getNFTImage(game.tokenId1);
-                        const image2 = await getNFTImage(game.tokenId2);
                         resolvedGames.push({
                             gameId: i.toString(),
                             player1: game.player1.toLowerCase(),
                             tokenId1: game.tokenId1.toString(),
-                            image1,
                             player2: game.player2 ? game.player2.toLowerCase() : null,
                             tokenId2: game.tokenId2.toString(),
-                            image2,
                             resolved: true,
                             winner,
                             userResolved: {
@@ -266,26 +241,6 @@ async function initializeContract() {
         }
     }
 
-    // Fetch NFT image
-    async function getNFTImage(tokenId) {
-        try {
-            let uri = await nftContract.tokenURI(tokenId);
-            console.log(`Fetching metadata for token ${tokenId}: ${uri}`);
-            if (uri.startsWith('ipfs://')) uri = 'https://ipfs.io/ipfs/' + uri.slice(7);
-            const response = await fetch(uri);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const metadata = await response.json();
-            let image = metadata.image;
-            console.log(`Image URL for token ${tokenId}: ${image}`);
-            if (image && image.startsWith('ipfs://')) image = 'https://ipfs.io/ipfs/' + image.slice(7);
-            return image || 'https://via.placeholder.com/64';
-        } catch (error) {
-            console.error(`Error fetching image for token ${tokenId}:`, error.message);
-            return 'https://via.placeholder.com/64';
-        }
-    }
-
-    // Fetch user daycare data
     async function fetchUserDaycare(account) {
         const accountLower = account.toLowerCase();
         try {
@@ -293,13 +248,11 @@ async function initializeContract() {
             const daycares = await daycareContract.getDaycares(account);
             const enhancedDaycares = await Promise.all(daycares.map(async (d, index) => {
                 const pending = await daycareContract.getPendingPoints(account, index);
-                const image = await getNFTImage(d.tokenId);
                 return {
                     tokenId: d.tokenId.toString(),
                     startTime: d.startTime.toString(),
                     claimedPoints: d.claimedPoints.toString(),
-                    pending: pending.toString(),
-                    image
+                    pending: pending.toString()
                 };
             }));
             return {
@@ -312,7 +265,6 @@ async function initializeContract() {
         }
     }
 
-    // Event listeners for games
     contract.on('GameCreated', async (gameId, player1, tokenId1) => {
         console.log('GameCreated:', gameId.toString(), 'Player:', player1);
         await fetchOpenGames();
@@ -321,16 +273,12 @@ async function initializeContract() {
     contract.on('GameJoined', async (gameId, player2, tokenId2) => {
         console.log('GameJoined:', gameId.toString(), 'Player:', player2);
         const game = await contract.getGame(gameId);
-        const image1 = await getNFTImage(game.tokenId1);
-        const image2 = await getNFTImage(tokenId2);
         const gameData = {
             gameId: gameId.toString(),
             player1: game.player1.toLowerCase(),
             tokenId1: game.tokenId1.toString(),
-            image1,
             player2: player2.toLowerCase(),
             tokenId2: game.tokenId2.toString(),
-            image2,
             joinTimestamp: game.joinTimestamp.toString(),
             resolved: false,
             userResolved: {
@@ -354,15 +302,11 @@ async function initializeContract() {
 
     contract.on('GameResolved', async (gameId, winner, tokenId1, tokenId2) => {
         console.log('GameResolved:', gameId.toString(), 'Winner:', winner.toLowerCase());
-        const image1 = await getNFTImage(tokenId1);
-        const image2 = await getNFTImage(tokenId2);
         resolvedGames = resolvedGames.map(game =>
             game.gameId === gameId.toString() ? {
                 ...game,
                 winner: winner.toLowerCase(),
                 resolved: true,
-                image1,
-                image2,
                 viewed: {
                     ...game.viewed,
                     [game.player1.toLowerCase()]: false,
@@ -381,7 +325,6 @@ async function initializeContract() {
         await fetchOpenGames();
     });
 
-    // Event listeners for daycare
     daycareContract.on('Claimed', async (user, amount) => {
         console.log('Claimed:', user.toLowerCase(), 'Amount:', amount.toString());
         const userLower = user.toLowerCase();
@@ -432,16 +375,12 @@ async function initializeContract() {
         }
     });
 
-    // Initial fetch
     await fetchOpenGames();
-
-    // Periodically fetch open games
     setInterval(async () => {
         console.log('Periodic fetch of open games');
         await fetchOpenGames();
     }, 600000);
 
-    // Socket.IO event listeners
     io.on('connection', (socket) => {
         console.log('Client connected:', socket.id);
         socket.on('registerAddress', ({ address }) => {
@@ -497,16 +436,12 @@ async function initializeContract() {
                             socket.emit('gameResolution', { gameId, error: 'Game not resolved or canceled' });
                             return;
                         }
-                        const image1 = await getNFTImage(game.tokenId1);
-                        const image2 = await getNFTImage(game.tokenId2);
                         resolvedGame = {
                             gameId: gameId.toString(),
                             player1: game.player1.toLowerCase(),
                             tokenId1: game.tokenId1.toString(),
-                            image1,
                             player2: game.player2 ? game.player2.toLowerCase() : null,
                             tokenId2: game.tokenId2.toString(),
-                            image2,
                             resolved: !game.active,
                             winner,
                             userResolved: {
@@ -545,8 +480,6 @@ async function initializeContract() {
                     winner: resolvedGame.winner,
                     tokenId1: resolvedGame.tokenId1,
                     tokenId2: resolvedGame.tokenId2,
-                    image1: resolvedGame.image1,
-                    image2: resolvedGame.image2,
                     resolved: true,
                     createTimestamp: resolvedGame.createTimestamp,
                     joinTimestamp: resolvedGame.joinTimestamp
