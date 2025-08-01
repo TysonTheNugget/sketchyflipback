@@ -187,7 +187,7 @@ async function initializeContract() {
             );
             for (let i = 0; i < 1000; i++) {
                 try {
-                    const game = await contract.getGame(i);
+                    const game = await pollingContract.getGame(i);
                     if (!game.active &&
                         (game.player1.toLowerCase() === accountLower ||
                          (game.player2 && game.player2.toLowerCase() === accountLower)) &&
@@ -201,7 +201,7 @@ async function initializeContract() {
                                 ethers.utils.hexZeroPad(ethers.utils.hexValue(i), 32)
                             ]
                         };
-                        const logs = await provider.getLogs(filter);
+                        const logs = await httpProvider.getLogs(filter);
                         let winner = null;
                         if (logs.length > 0) {
                             const log = logs[0];
