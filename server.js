@@ -49,9 +49,9 @@ function loadGamesFromDisk() {
     if (fs.existsSync(gamesFile)) {
         try {
             openGames = JSON.parse(fs.readFileSync(gamesFile));
-            console.log('✅ Loaded open games from disk:', openGames.length);
+            console.log('✅ Loaded open games from disk');
         } catch (e) {
-            console.error('❌ Error loading open games from disk:', e.message, e.stack);
+            console.error('❌ Error loading open games from disk:', e);
         }
     }
 }
@@ -60,9 +60,9 @@ function loadGamesFromDisk() {
 function saveGamesToDisk() {
     try {
         fs.writeFileSync(gamesFile, JSON.stringify(openGames, null, 2));
-        console.log('✅ Saved open games to disk:', openGames.length);
+        console.log('✅ Saved open games to disk');
     } catch (e) {
-        console.error('❌ Error saving open games to disk:', e.message, e.stack);
+        console.error('❌ Error saving open games to disk:', e);
     }
 }
 
@@ -71,9 +71,9 @@ function loadResolvedGamesFromDisk() {
     if (fs.existsSync(resolvedGamesFile)) {
         try {
             resolvedGames = JSON.parse(fs.readFileSync(resolvedGamesFile));
-            console.log('✅ Loaded resolved games from disk:', resolvedGames.length);
+            console.log('✅ Loaded resolved games from disk');
         } catch (e) {
-            console.error('❌ Error loading resolved games from disk:', e.message, e.stack);
+            console.error('❌ Error loading resolved games from disk:', e);
         }
     }
 }
@@ -82,9 +82,9 @@ function loadResolvedGamesFromDisk() {
 function saveResolvedGamesToDisk() {
     try {
         fs.writeFileSync(resolvedGamesFile, JSON.stringify(resolvedGames, null, 2));
-        console.log('✅ Saved resolved games to disk:', resolvedGames.length);
+        console.log('✅ Saved resolved games to disk');
     } catch (e) {
-        console.error('❌ Error saving resolved games to disk:', e.message, e.stack);
+        console.error('❌ Error saving resolved games to disk:', e);
     }
 }
 
@@ -94,7 +94,7 @@ function loadResolvedGamesByUser() {
     try {
         return JSON.parse(fs.readFileSync(resolvedGamesByUserFile));
     } catch (e) {
-        console.error('❌ Error loading resolved games by user from disk:', e.message, e.stack);
+        console.error('❌ Error loading resolved games by user from disk:', e);
         return {};
     }
 }
@@ -103,9 +103,9 @@ function loadResolvedGamesByUser() {
 function saveResolvedGamesByUser(data) {
     try {
         fs.writeFileSync(resolvedGamesByUserFile, JSON.stringify(data, null, 2));
-        console.log('✅ Saved resolved games by user to disk:', Object.keys(data).length);
+        console.log('✅ Saved resolved games by user to disk');
     } catch (e) {
-        console.error('❌ Error saving resolved games by user to disk:', e.message, e.stack);
+        console.error('❌ Error saving resolved games by user to disk:', e);
     }
 }
 
@@ -116,7 +116,7 @@ async function setupProvider() {
     try {
         provider = new ethers.providers.WebSocketProvider(process.env.ALCHEMY_WSS_URL);
         provider.on('error', (error) => {
-            console.error('WebSocket error:', error.message, error.stack);
+            console.error('WebSocket error:', error.message);
             setTimeout(setupProvider, 5000);
         });
         provider.on('close', (code, reason) => {
@@ -124,7 +124,7 @@ async function setupProvider() {
             setTimeout(setupProvider, 5000);
         });
     } catch (error) {
-        console.error('Provider setup error:', error.message, error.stack);
+        console.error('Provider setup error:', error);
         setTimeout(setupProvider, 5000);
         return null;
     }
@@ -133,10 +133,7 @@ async function setupProvider() {
 
 async function initializeContract() {
     const provider = await setupProvider();
-    if (!provider) {
-        console.error('Provider initialization failed, cannot proceed');
-        return;
-    }
+    if (!provider) return;
 
     const contract = new ethers.Contract(gameAddress, gameABI, provider);
     const nftContract = new ethers.Contract(nftAddress, nftABI, provider);
@@ -157,26 +154,6 @@ async function initializeContract() {
         try {
             const openIds = await pollingContract.getOpenGames();
             console.log('👉 Fetched openIds:', openIds.map(i => i.toString()));
-            const openIdsSet = new Set(openIds.map(id => id.toString()));
-            // Check for games that were open but are now closed
-            const closedGames = openGames.filter(game => !openIdsSet.has(game.id));
-            for (const game of closedGames) {
-                console.log(`Game ${game.id} no longer open, checking resolution for player: ${game.player1}`);
-                const userGames = await fetchResolvedGamesForAccount(game.player1);
-                const socketId = userSessions.get(game.player1);
-                if (socketId) {
-                    console.log(`Emitting resolved games to ${game.player1}:`, userGames.length);
-                    io.to(socketId).emit('resolvedGames', userGames);
-                }
-                if (game.player2) {
-                    const userGames2 = await fetchResolvedGamesForAccount(game.player2);
-                    const socketId2 = userSessions.get(game.player2);
-                    if (socketId2) {
-                        console.log(`Emitting resolved games to ${game.player2}:`, userGames2.length);
-                        io.to(socketId2).emit('resolvedGames', userGames2);
-                    }
-                }
-            }
             openGames = [];
             for (let id of openIds) {
                 try {
@@ -191,32 +168,31 @@ async function initializeContract() {
                         createTimestamp: game.createTimestamp.toString()
                     });
                 } catch (error) {
-                    console.error(`Error fetching game ${id}:`, error.message, error.stack);
+                    console.error(`Error fetching game ${id}:`, error);
                 }
             }
-            console.log('Broadcasting open games:', openGames.length);
+            console.log('Broadcasting open games:', openGames);
             io.emit('openGamesUpdate', openGames);
             saveGamesToDisk();
         } catch (error) {
-            console.error('Error in fetchOpenGames:', error.message, error.stack);
+            console.error('Error in fetchOpenGames (likely provider issue):', error.message);
         }
     }
 
     // Fetch resolved games for an account
     async function fetchResolvedGamesForAccount(accountLower) {
-        console.log(`Fetching resolved games for ${accountLower}`);
         try {
-            let newResolvedGames = [];
-            for (let i = 0; i < 10000; i++) { // Increased range to catch more games
+            resolvedGames = resolvedGames.filter(game =>
+                game.player1 === accountLower || (game.player2 && game.player2 === accountLower)
+            );
+            for (let i = 0; i < 1000; i++) {
                 try {
                     const game = await pollingContract.getGame(i);
                     if (!game.active &&
                         (game.player1.toLowerCase() === accountLower ||
-                         (game.player2 && game.player2.toLowerCase() === accountLower))) {
-                        if (game.player2 === ethers.constants.AddressZero) {
-                            console.log(`Game ${i} not joined, skipping`);
-                            continue; // Not joined, skip
-                        }
+                         (game.player2 && game.player2.toLowerCase() === accountLower)) &&
+                        !resolvedGames.some(g => g.gameId === i.toString())) {
+                        if (game.player2 === ethers.constants.AddressZero) continue; // Not joined, skip
                         const topic = ethers.utils.id('GameResolved(uint256,address,uint256,uint256)');
                         const filter = {
                             address: gameAddress,
@@ -232,26 +208,11 @@ async function initializeContract() {
                             const event = contract.interface.parseLog(log);
                             winner = event.args.winner.toLowerCase();
                         } else {
-                            console.log(`No GameResolved event for game ${i}, checking if canceled`);
-                            const cancelTopic = ethers.utils.id('GameCanceled(uint256)');
-                            const cancelFilter = {
-                                address: gameAddress,
-                                topics: [
-                                    cancelTopic,
-                                    ethers.utils.hexZeroPad(ethers.utils.hexValue(i), 32)
-                                ]
-                            };
-                            const cancelLogs = await httpProvider.getLogs(cancelFilter);
-                            if (cancelLogs.length > 0) {
-                                console.log(`Game ${i} was canceled, skipping`);
-                                continue;
-                            }
-                            console.log(`Game ${i} not resolved or canceled, skipping`);
                             continue;
                         }
                         const image1 = await getNFTImage(game.tokenId1);
                         const image2 = await getNFTImage(game.tokenId2);
-                        const gameData = {
+                        resolvedGames.push({
                             gameId: i.toString(),
                             player1: game.player1.toLowerCase(),
                             tokenId1: game.tokenId1.toString(),
@@ -262,51 +223,30 @@ async function initializeContract() {
                             resolved: true,
                             winner,
                             userResolved: {
-                                [game.player1.toLowerCase()]: resolvedGamesByUser[game.player1.toLowerCase()]?.includes(i.toString()) || false,
-                                [game.player2 ? game.player2.toLowerCase() : '']: resolvedGamesByUser[game.player2?.toLowerCase()]?.includes(i.toString()) || false
+                                [game.player1.toLowerCase()]: false,
+                                [game.player2 ? game.player2.toLowerCase() : '']: false
                             },
                             viewed: {
-                                [game.player1.toLowerCase()]: resolvedGamesByUser[game.player1.toLowerCase()]?.includes(i.toString()) || false,
-                                [game.player2 ? game.player2.toLowerCase() : '']: resolvedGamesByUser[game.player2?.toLowerCase()]?.includes(i.toString()) || false
+                                [game.player1.toLowerCase()]: false,
+                                [game.player2 ? game.player2.toLowerCase() : '']: false
                             },
                             createTimestamp: game.createTimestamp.toString(),
                             joinTimestamp: game.joinTimestamp.toString()
-                        };
-                        if (!resolvedGames.some(g => g.gameId === i.toString())) {
-                            console.log(`Adding new resolved game ${i} for ${accountLower}`);
-                            newResolvedGames.push(gameData);
-                        } else {
-                            console.log(`Game ${i} already in resolvedGames, updating`);
-                            newResolvedGames.push(gameData);
-                        }
+                        });
                     }
                 } catch (e) {
-                    if (e.message.includes('revert') || e.message.includes('out of bounds')) {
-                        console.log(`Reached end of games at index ${i}`);
-                        break;
-                    }
-                    console.error(`Error fetching game ${i}:`, e.message, e.stack);
+                    if (e.message.includes('revert') || e.message.includes('out of bounds')) break;
                 }
             }
-            // Update resolvedGames, avoiding duplicates
-            resolvedGames = resolvedGames.filter(game => 
-                !(game.player1 === accountLower || (game.player2 && game.player2 === accountLower)) ||
-                newResolvedGames.some(newGame => newGame.gameId === game.gameId)
-            );
-            resolvedGames = [...resolvedGames, ...newResolvedGames.filter(newGame => 
-                !resolvedGames.some(existing => existing.gameId === newGame.gameId)
-            )];
             saveResolvedGamesToDisk();
             const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
-            const filteredGames = resolvedGames.filter(game =>
+            return resolvedGames.filter(game =>
                 (game.player1 === accountLower ||
                 (game.player2 && game.player2 === accountLower)) &&
                 !userResolvedGames.has(game.gameId)
             );
-            console.log(`Returning ${filteredGames.length} resolved games for ${accountLower}`);
-            return filteredGames;
         } catch (error) {
-            console.error('Error fetching resolved games for', accountLower, ':', error.message, error.stack);
+            console.error('Error fetching resolved games:', error);
             const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
             return resolvedGames.filter(game =>
                 (game.player1 === accountLower ||
@@ -318,12 +258,7 @@ async function initializeContract() {
 
     // Fetch NFT image
     async function getNFTImage(tokenId) {
-        try {
-            return `https://f005.backblazeb2.com/file/sketchymilios/${tokenId}.png`;
-        } catch (error) {
-            console.error(`Error fetching NFT image for token ${tokenId}:`, error.message, error.stack);
-            return 'https://via.placeholder.com/64';
-        }
+        return `https://f005.backblazeb2.com/file/sketchymilios/${tokenId}.png`;
     }
 
     // Fetch user daycare data
@@ -343,25 +278,24 @@ async function initializeContract() {
                     image
                 };
             }));
-            console.log(`Fetched daycare data for ${accountLower}: ${enhancedDaycares.length} daycares`);
             return {
                 points: points.toString(),
                 daycares: enhancedDaycares
             };
         } catch (error) {
-            console.error(`Error fetching daycare for ${accountLower}:`, error.message, error.stack);
+            console.error(`Error fetching daycare for ${accountLower}:`, error);
             return { points: '0', daycares: [] };
         }
     }
 
     // Event listeners for games
     contract.on('GameCreated', async (gameId, player1, tokenId1) => {
-        console.log('GameCreated:', gameId.toString(), 'Player:', player1.toLowerCase());
+        console.log('GameCreated:', gameId.toString(), 'Player:', player1);
         await fetchOpenGames();
     });
 
     contract.on('GameJoined', async (gameId, player2, tokenId2) => {
-        console.log('GameJoined:', gameId.toString(), 'Player:', player2.toLowerCase());
+        console.log('GameJoined:', gameId.toString(), 'Player:', player2);
         const game = await contract.getGame(gameId);
         const image1 = await getNFTImage(game.tokenId1);
         const image2 = await getNFTImage(tokenId2);
@@ -389,14 +323,8 @@ async function initializeContract() {
         saveResolvedGamesToDisk();
         const player1Socket = userSessions.get(game.player1.toLowerCase());
         const player2Socket = userSessions.get(player2.toLowerCase());
-        if (player1Socket) {
-            console.log(`Emitting gameJoined to ${game.player1.toLowerCase()}`);
-            io.to(player1Socket).emit('gameJoined', gameData);
-        }
-        if (player2Socket) {
-            console.log(`Emitting gameJoined to ${player2.toLowerCase()}`);
-            io.to(player2Socket).emit('gameJoined', gameData);
-        }
+        if (player1Socket) io.to(player1Socket).emit('gameJoined', gameData);
+        if (player2Socket) io.to(player2Socket).emit('gameJoined', gameData);
         await fetchOpenGames();
     });
 
@@ -419,24 +347,6 @@ async function initializeContract() {
             } : game
         );
         saveResolvedGamesToDisk();
-        const player1 = resolvedGames.find(g => g.gameId === gameId.toString())?.player1;
-        const player2 = resolvedGames.find(g => g.gameId === gameId.toString())?.player2;
-        if (player1) {
-            const socketId1 = userSessions.get(player1);
-            if (socketId1) {
-                const userGames = await fetchResolvedGamesForAccount(player1);
-                console.log(`Emitting resolved games to ${player1}:`, userGames.length);
-                io.to(socketId1).emit('resolvedGames', userGames);
-            }
-        }
-        if (player2) {
-            const socketId2 = userSessions.get(player2);
-            if (socketId2) {
-                const userGames = await fetchResolvedGamesForAccount(player2);
-                console.log(`Emitting resolved games to ${player2}:`, userGames.length);
-                io.to(socketId2).emit('resolvedGames', userGames);
-            }
-        }
         await fetchOpenGames();
     });
 
@@ -509,16 +419,15 @@ async function initializeContract() {
 
     // Periodically fetch resolved games for all connected users
     setInterval(async () => {
-        console.log('Periodic fetch of resolved games for all users:', userSessions.size);
+        console.log('Periodic fetch of resolved games for all users');
         for (let address of userSessions.keys()) {
             const userGames = await fetchResolvedGamesForAccount(address);
             const socketId = userSessions.get(address);
             if (socketId) {
-                console.log(`Emitting resolved games to ${address}: ${userGames.length} games`);
                 io.to(socketId).emit('resolvedGames', userGames);
             }
         }
-    }, 10000); // Set to 10 seconds for faster updates
+    }, 10000); // Set to 40 seconds (40000 ms); change to 10000 for 10 seconds
 
     // Socket.IO event listeners
     io.on('connection', (socket) => {
@@ -527,8 +436,8 @@ async function initializeContract() {
             console.log(`Registering address ${address} with socket ${socket.id}`);
             userSessions.set(address.toLowerCase(), socket.id);
             socket.emit('openGamesUpdate', openGames);
+            // Fetch resolved games immediately upon registration
             const userGames = await fetchResolvedGamesForAccount(address.toLowerCase());
-            console.log(`Initial resolved games for ${address}:`, userGames.length);
             socket.emit('resolvedGames', userGames);
         });
         socket.emit('openGamesUpdate', openGames);
@@ -539,7 +448,6 @@ async function initializeContract() {
             const accountLower = account.toLowerCase();
             console.log('Fetching resolved games for account:', accountLower);
             const userGames = await fetchResolvedGamesForAccount(accountLower);
-            console.log(`Emitting resolved games to ${accountLower}:`, userGames.length);
             socket.emit('resolvedGames', userGames);
         });
         socket.on('fetchUserDaycare', async ({ account }) => {
@@ -559,7 +467,6 @@ async function initializeContract() {
                     if (game.player1.toLowerCase() === accountLower ||
                         (game.player2 && game.player2.toLowerCase() === accountLower)) {
                         if (game.player2 === ethers.constants.AddressZero) {
-                            console.log(`Game ${gameId} not joined, emitting error`);
                             socket.emit('gameResolution', { gameId, error: 'Game not joined' });
                             return;
                         }
@@ -578,22 +485,6 @@ async function initializeContract() {
                             const event = contract.interface.parseLog(log);
                             winner = event.args.winner.toLowerCase();
                         } else {
-                            console.log(`Game ${gameId} not resolved or canceled, checking cancellation`);
-                            const cancelTopic = ethers.utils.id('GameCanceled(uint256)');
-                            const cancelFilter = {
-                                address: gameAddress,
-                                topics: [
-                                    cancelTopic,
-                                    ethers.utils.hexZeroPad(ethers.utils.hexValue(gameIdNum), 32)
-                                ]
-                            };
-                            const cancelLogs = await provider.getLogs(cancelFilter);
-                            if (cancelLogs.length > 0) {
-                                console.log(`Game ${gameId} was canceled, emitting error`);
-                                socket.emit('gameResolution', { gameId, error: 'Game was canceled' });
-                                return;
-                            }
-                            console.log(`Game ${gameId} not resolved, emitting error`);
                             socket.emit('gameResolution', { gameId, error: 'Game not resolved or canceled' });
                             return;
                         }
@@ -610,32 +501,29 @@ async function initializeContract() {
                             resolved: !game.active,
                             winner,
                             userResolved: {
-                                [game.player1.toLowerCase()]: resolvedGamesByUser[game.player1.toLowerCase()]?.includes(gameId) || false,
-                                [game.player2 ? game.player2.toLowerCase() : '']: resolvedGamesByUser[game.player2?.toLowerCase()]?.includes(gameId) || false
+                                [game.player1.toLowerCase()]: false,
+                                [game.player2 ? game.player2.toLowerCase() : '']: false
                             },
                             viewed: {
-                                [game.player1.toLowerCase()]: resolvedGamesByUser[game.player1.toLowerCase()]?.includes(gameId) || false,
-                                [game.player2 ? game.player2.toLowerCase() : '']: resolvedGamesByUser[game.player2?.toLowerCase()]?.includes(gameId) || false
+                                [game.player1.toLowerCase()]: false,
+                                [game.player2 ? game.player2.toLowerCase() : '']: false
                             },
                             createTimestamp: game.createTimestamp.toString(),
                             joinTimestamp: game.joinTimestamp.toString()
                         };
-                        resolvedGames = resolvedGames.filter(g => g.gameId !== gameId);
                         resolvedGames.push(resolvedGame);
                         saveResolvedGamesToDisk();
                     } else {
-                        console.log(`Game ${gameId} not found or user ${accountLower} not a player`);
                         socket.emit('gameResolution', { gameId, error: 'Game not found or user not a player' });
                         return;
                     }
                 } catch (error) {
-                    console.error(`Error fetching game ${gameId} from contract:`, error.message, error.stack);
+                    console.error(`Error fetching game ${gameId} from contract:`, error);
                     socket.emit('gameResolution', { gameId, error: 'Game not found' });
                     return;
                 }
             }
             resolvedGame.viewed[accountLower] = true;
-            resolvedGame.userResolved[accountLower] = true;
             saveResolvedGamesToDisk();
             if (!resolvedGamesByUser[accountLower]) resolvedGamesByUser[accountLower] = [];
             if (!resolvedGamesByUser[accountLower].includes(gameId)) {
@@ -643,7 +531,6 @@ async function initializeContract() {
                 saveResolvedGamesByUser(resolvedGamesByUser);
             }
             if (resolvedGame.resolved && resolvedGame.winner) {
-                console.log(`Emitting gameResolution for game ${gameId} to ${accountLower}`);
                 socket.emit('gameResolution', {
                     gameId,
                     winner: resolvedGame.winner,
@@ -661,10 +548,8 @@ async function initializeContract() {
                     (game.player2 && game.player2 === accountLower)) &&
                     !userResolvedGames.has(game.gameId)
                 );
-                console.log(`Emitting updated resolved games to ${accountLower}:`, userGames.length);
                 socket.emit('resolvedGames', userGames);
             } else {
-                console.log(`Game ${gameId} not resolved or no winner, emitting error`);
                 socket.emit('gameResolution', { gameId, error: 'Game not resolved or no winner' });
             }
         });
@@ -690,7 +575,6 @@ async function initializeContract() {
                 (game.player2 && game.player2 === accountLower)) &&
                 !userResolvedGames.has(game.gameId)
             );
-            console.log(`Emitting updated resolved games after markGameResolved to ${accountLower}:`, userGames.length);
             socket.emit('resolvedGames', userGames);
         });
         socket.on('removeGame', ({ gameId, account }) => {
@@ -709,7 +593,6 @@ async function initializeContract() {
                 (game.player2 && game.player2 === accountLower)) &&
                 !userResolvedGames.has(game.gameId)
             );
-            console.log(`Emitting updated resolved games after removeGame to ${accountLower}:`, userGames.length);
             socket.emit('resolvedGames', userGames);
         });
         socket.on('markGamesViewed', ({ account, gameIds }) => {
@@ -724,21 +607,10 @@ async function initializeContract() {
                       viewed: {
                         ...game.viewed,
                         [accountLower]: true
-                      },
-                      userResolved: {
-                        ...game.userResolved,
-                        [accountLower]: true
                       }
                     }
                   : game
             );
-            if (!resolvedGamesByUser[accountLower]) resolvedGamesByUser[accountLower] = [];
-            gameIds.forEach(gameId => {
-                if (!resolvedGamesByUser[accountLower].includes(gameId)) {
-                    resolvedGamesByUser[accountLower].push(gameId);
-                }
-            });
-            saveResolvedGamesByUser(resolvedGamesByUser);
             saveResolvedGamesToDisk();
             const userResolvedGames = new Set(resolvedGamesByUser[accountLower] || []);
             const userGames = resolvedGames.filter(game =>
@@ -746,7 +618,6 @@ async function initializeContract() {
                 (game.player2 && game.player2 === accountLower)) &&
                 !userResolvedGames.has(game.gameId)
             );
-            console.log(`Emitting updated resolved games after markGamesViewed to ${accountLower}:`, userGames.length);
             socket.emit('resolvedGames', userGames);
         });
         socket.on('disconnect', () => {
