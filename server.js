@@ -417,13 +417,36 @@ async function initializeContract() {
         await fetchOpenGames();
     }, 10000);
 
+    // Periodically fetch resolved games for connected users
+    setInterval(async () => {
+        console.log('Periodic fetch of resolved games for connected users');
+        for (const [accountLower, socketId] of userSessions.entries()) {
+            try {
+                const userGames = await fetchResolvedGamesForAccount(accountLower);
+                if (userGames.length > 0) {
+                    io.to(socketId).emit('resolvedGames', userGames);
+                }
+            } catch (error) {
+                console.error(`Error fetching resolved games for ${accountLower}:`, error);
+            }
+        }
+    }, 30000); // Poll every 30 seconds
+
     // Socket.IO event listeners
     io.on('connection', (socket) => {
         console.log('Client connected:', socket.id);
-        socket.on('registerAddress', ({ address }) => {
+        socket.on('registerAddress', async ({ address }) => {
             console.log(`Registering address ${address} with socket ${socket.id}`);
-            userSessions.set(address.toLowerCase(), socket.id);
+            const accountLower = address.toLowerCase();
+            userSessions.set(accountLower, socket.id);
             socket.emit('openGamesUpdate', openGames);
+            // Trigger resolved games fetch on connection
+            try {
+                const userGames = await fetchResolvedGamesForAccount(accountLower);
+                socket.emit('resolvedGames', userGames);
+            } catch (error) {
+                console.error(`Error fetching resolved games for ${accountLower} on connect:`, error);
+            }
         });
         socket.emit('openGamesUpdate', openGames);
         setTimeout(() => {
