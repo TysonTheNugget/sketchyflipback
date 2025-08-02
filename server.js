@@ -417,36 +417,28 @@ async function initializeContract() {
         await fetchOpenGames();
     }, 10000);
 
-    // Periodically fetch resolved games for connected users
+    // Periodically fetch resolved games for all connected users
     setInterval(async () => {
-        console.log('Periodic fetch of resolved games for connected users');
-        for (const [accountLower, socketId] of userSessions.entries()) {
-            try {
-                const userGames = await fetchResolvedGamesForAccount(accountLower);
-                if (userGames.length > 0) {
-                    io.to(socketId).emit('resolvedGames', userGames);
-                }
-            } catch (error) {
-                console.error(`Error fetching resolved games for ${accountLower}:`, error);
+        console.log('Periodic fetch of resolved games for all users');
+        for (let address of userSessions.keys()) {
+            const userGames = await fetchResolvedGamesForAccount(address);
+            const socketId = userSessions.get(address);
+            if (socketId) {
+                io.to(socketId).emit('resolvedGames', userGames);
             }
         }
-    }, 30000); // Poll every 30 seconds
+    }, 5000); // Set to 40 seconds (40000 ms); change to 10000 for 10 seconds
 
     // Socket.IO event listeners
     io.on('connection', (socket) => {
         console.log('Client connected:', socket.id);
         socket.on('registerAddress', async ({ address }) => {
             console.log(`Registering address ${address} with socket ${socket.id}`);
-            const accountLower = address.toLowerCase();
-            userSessions.set(accountLower, socket.id);
+            userSessions.set(address.toLowerCase(), socket.id);
             socket.emit('openGamesUpdate', openGames);
-            // Trigger resolved games fetch on connection
-            try {
-                const userGames = await fetchResolvedGamesForAccount(accountLower);
-                socket.emit('resolvedGames', userGames);
-            } catch (error) {
-                console.error(`Error fetching resolved games for ${accountLower} on connect:`, error);
-            }
+            // Fetch resolved games immediately upon registration
+            const userGames = await fetchResolvedGamesForAccount(address.toLowerCase());
+            socket.emit('resolvedGames', userGames);
         });
         socket.emit('openGamesUpdate', openGames);
         setTimeout(() => {
